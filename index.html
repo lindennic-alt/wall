@@ -20,7 +20,7 @@
   --line: #dde2e7; --line-strong: #c7cfd7;
   --now: #d7263d; --sun: #d98a12;
   --shift: #13757d; --bolus: #3f8a2f; --study: #6a55c8; --leisure: #d98a12;
-  --rhythm: #6a55c8; --reserved: #4f6478; --due: #c0283c; --on-block: #ffffff;
+  --rhythm: #6a55c8; --reserved: #4f6478; --due: #c0283c; --on-block: #ffffff; --exercise: #2f6fb0;
   --font-num: "Archivo", "Helvetica Neue", Arial, sans-serif;
   --font-body: "Atkinson Hyperlegible", "Helvetica Neue", Arial, sans-serif;
   color-scheme: light;
@@ -30,14 +30,14 @@
     --bg: #000000; --panel: #0d1117; --ink: #e9edf2; --muted: #8d99a6;
     --line: #1c232c; --line-strong: #2a333e; --now: #ff4d5e; --sun: #f0a04b;
     --shift: #1b8a93; --bolus: #4f9e3c; --study: #7a66d6; --leisure: #e39a22;
-    --rhythm: #7a66d6; --reserved: #4d6276; --due: #ff6b7a; color-scheme: dark;
+    --rhythm: #7a66d6; --reserved: #4d6276; --due: #ff6b7a; --exercise: #3b7fd0; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #000000; --panel: #0d1117; --ink: #e9edf2; --muted: #8d99a6;
   --line: #1c232c; --line-strong: #2a333e; --now: #ff4d5e; --sun: #f0a04b;
   --shift: #1b8a93; --bolus: #4f9e3c; --study: #7a66d6; --leisure: #e39a22;
-  --rhythm: #7a66d6; --reserved: #4d6276; --due: #ff6b7a; color-scheme: dark;
+  --rhythm: #7a66d6; --reserved: #4d6276; --due: #ff6b7a; --exercise: #3b7fd0; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -111,7 +111,9 @@ button.chip, button.ev { cursor: pointer; }
 .ev b { display: block; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ev .tm { display: block; font-size: .82em; opacity: .92; font-variant-numeric: tabular-nums; }
 .k-shift { background: var(--shift); } .k-bolus { background: var(--bolus); } .k-study { background: var(--study); }
-.k-leisure { background: var(--leisure); } .k-rhythm { background: var(--rhythm); } .k-reserved { background: var(--reserved); }
+.k-leisure { background: var(--leisure); } .k-exercise { background: var(--exercise); }
+.ev.k-quiet { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
+.ev.k-quiet b { font-weight: 400; } .k-rhythm { background: var(--rhythm); } .k-reserved { background: var(--reserved); }
 .ev.past { opacity: .55; }
 button.ev:focus-visible, button.chip:focus-visible, .pop button:focus-visible { outline: 3px solid var(--now); outline-offset: 1px; }
 .bar { display: block; height: 3px; border-radius: 2px; background: rgba(255,255,255,.3); margin-top: .35em; overflow: hidden; }
@@ -120,6 +122,8 @@ button.ev:focus-visible, button.chip:focus-visible, .pop button:focus-visible { 
 .pop { position: absolute; left: 4px; right: 4px; z-index: 5; background: var(--panel); color: var(--ink);
   border: 2px solid var(--bolus); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
   display: flex; flex-direction: column; max-height: calc(100% - 8px); }
+.pop.study { border-color: var(--study); }
+.pop.study header { background: var(--study); }
 .pop header { background: var(--bolus); color: var(--on-block); padding: .45em .6em; display: flex; justify-content: space-between; align-items: baseline; gap: .5em; }
 .pop header b { font-family: var(--font-num); font-size: 1.15em; }
 .pop header button { background: none; border: 0; color: inherit; font: inherit; font-size: 1.3em; line-height: 1; cursor: pointer; padding: 0 .2em; }
@@ -368,6 +372,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   function dayModel(key) {
     const info = (data && data.days && data.days[key]) || { items: [] };
     const timed = [], allday = [];
+    if (info.blocks && info.blocks.length) return blockModel(key, info);
     const tasks = info.items.filter((i) => i.kind === "task" || i.kind === "reserved");
     const block = info.items.find((i) => i.kind === "rhythm" && /bolus/i.test(i.title));
     for (const it of info.items) {
@@ -388,6 +393,37 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     }
     return { timed, allday };
   }
+  // A day planned in time blocks: every block goes on the grid; Bolus and
+  // Study blocks open the tasks planned into them.
+  const BLOCK_KIND = { shift: "shift", academic: "shift", exercise: "exercise", bolus: "bolus", study: "study",
+    leisure: "leisure", buffer: "quiet", rest: "quiet" };
+  function blockModel(key, info) {
+    const timed = [], allday = [];
+    const tasks = info.items.filter((i) => i.kind === "task" || i.kind === "reserved");
+    const byPool = { bolus: tasks.filter((t) => (t.pool || "bolus") === "bolus"), study: tasks.filter((t) => t.pool === "study") };
+    const used = new Set();
+    for (const b of info.blocks) {
+      const s = toMin(b.start); let e = toMin(b.end);
+      if (s == null) continue;
+      if (e == null || e <= s || e === 1439) e = 1440;   // overnight or "23:59": to midnight
+      const kind = BLOCK_KIND[b.kind] || "rhythm";
+      const ev = { kind, title: b.title, start: s, end: e, endLabel: b.end, key };
+      if (b.kind === "bolus" || b.kind === "study") {
+        Object.assign(ev, { pool: b.kind, tasks: byPool[b.kind], done: byPool[b.kind].filter((t) => t.done).length });
+        used.add(b.kind);
+      }
+      timed.push(ev);
+    }
+    info.items.filter((i) => i.kind === "deadline").forEach((it) => allday.push({ kind: "due", title: `Due: ${it.title}` }));
+    for (const pool of ["bolus", "study"]) {
+      if (!used.has(pool) && byPool[pool].length)
+        allday.push({ kind: pool, pool, key, title: pool === "study" ? "Study" : "Bolus", tasks: byPool[pool], done: byPool[pool].filter((t) => t.done).length });
+    }
+    return { timed, allday };
+  }
+  const isPool = (e) => e.tasks && (e.kind === "bolus" || e.kind === "study");
+  const popId = (e) => `${e.key}:${e.pool || "bolus"}:${e.start ?? "day"}`;
+
   // Side-by-side lanes for overlapping events.
   function lanes(evs) {
     evs.sort((a, b) => a.start - b.start || b.end - a.end);
@@ -407,7 +443,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     const today = new Date(), keys = [0, 1, 2].map((n) => iso(addDays(today, n)));
     const models = keys.map(dayModel);
     let from = (parseInt(cfg.from, 10) || 8) * 60, to = (parseInt(cfg.to, 10) || 22) * 60;
-    models.forEach((m) => m.timed.forEach((e) => { from = Math.min(from, Math.floor(e.start / 60) * 60); to = Math.max(to, Math.ceil(e.end / 60) * 60); }));
+    models.forEach((m) => m.timed.filter((e) => e.kind !== "quiet").forEach((e) => { from = Math.min(from, Math.floor(e.start / 60) * 60); to = Math.max(to, Math.ceil(e.end / 60) * 60); }));
     from = Math.max(0, from); to = Math.min(24 * 60, to);
 
     const head = $("cal-head"); head.textContent = "";
@@ -432,7 +468,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     ad.append(el("div", "lab", "All day"));
     models.forEach((m) => {
       const col = el("div", "col");
-      m.allday.forEach((a) => col.append(a.kind === "bolus" ? bolusButton(a, "chip k-bolus") : el("div", `chip k-${a.kind}`, a.title)));
+      m.allday.forEach((a) => col.append(isPool(a) ? bolusButton(a, `chip k-${a.kind}`) : el("div", `chip k-${a.kind}`, a.title)));
       ad.append(col);
     });
 
@@ -447,11 +483,11 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
       const col = el("div", "day-col");
       for (let h = from + 60; h < to; h += 60) { const l = el("div", "hline"); l.style.top = pct(h); col.append(l); }
       lanes(m.timed).forEach((e) => {
-        const isBolus = e.kind === "bolus";
-        const box = isBolus ? bolusButton(e, "ev k-bolus") : el("div", `ev k-${e.kind}`);
-        if (!isBolus) {
+        const pool = isPool(e);
+        const box = pool ? bolusButton(e, `ev k-${e.kind}`) : el("div", `ev k-${e.kind}`);
+        if (!pool) {
           box.append(el("b", null, e.title));
-          box.append(el("span", "tm", `${fmtClock(e.start)}–${e.end >= 1440 ? "24:00" : fmtClock(e.end)}${e.sub ? ` · ${e.sub}` : ""}`));
+          box.append(el("span", "tm", `${fmtClock(e.start)}–${endText(e)}${e.sub ? ` · ${e.sub}` : ""}`));
         }
         if (i === 0 && e.end <= nowMin) box.classList.add("past");
         box.style.top = pct(Math.max(e.start, from));
@@ -461,7 +497,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
         col.append(box);
       });
       if (i === 0 && nowMin >= from && nowMin <= to) { const l = el("div", "now-line"); l.style.top = pct(nowMin); col.append(l); }
-      if (openPop && openPop.key === keys[i]) col.append(popover(openPop, m.timed.find((e) => e.kind === "bolus"), pct));
+      if (openPop && openPop.key === keys[i]) col.append(popover(openPop, pct));
       grid.append(col);
     });
   }
@@ -469,11 +505,11 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   function bolusButton(b, cls) {
     const btn = el("button", cls);
     btn.type = "button";
-    btn.setAttribute("aria-expanded", openPop && openPop.key === b.key ? "true" : "false");
-    btn.append(el("b", null, "Bolus"));
+    btn.setAttribute("aria-expanded", openPop && openPop.id === popId(b) ? "true" : "false");
+    btn.append(el("b", null, b.title || "Bolus"));
     const bits = [b.tasks.length ? `${b.tasks.length} task${b.tasks.length > 1 ? "s" : ""}` : "active work"];
     if (b.done) bits.push(`${b.done} done`);
-    if (b.start != null) bits.unshift(`${fmtClock(b.start)}–${fmtClock(b.end)}`);
+    if (b.start != null) bits.unshift(`${fmtClock(b.start)}–${endText(b)}`);
     btn.append(el("span", "tm", bits.join(" · ")));
     if (b.tasks.length && b.start != null) {
       const bar = el("span", "bar"), fill = el("i");
@@ -484,22 +520,24 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     return btn;
   }
   function togglePop(b) {
-    openPop = openPop && openPop.key === b.key ? null : { key: b.key, tasks: b.tasks };
+    openPop = openPop && openPop.id === popId(b) ? null
+      : { id: popId(b), key: b.key, pool: b.pool || "bolus", title: b.title || "Bolus", start: b.start, tasks: b.tasks };
     clearTimeout(popTimer);
     if (openPop) popTimer = setTimeout(() => { openPop = null; renderCal(); }, POP_CLOSE);
     renderCal();
   }
-  function popover(p, timedBolus, pct) {
-    const box = el("div", "pop");
-    box.style.top = timedBolus ? pct(timedBolus.start) : "4px";
+  function endText(e) { return e.endLabel ? fmtClock(toMin(e.endLabel)) : e.end >= 1440 ? "24:00" : fmtClock(e.end); }
+  function popover(p, pct) {
+    const box = el("div", "pop" + (p.pool === "study" ? " study" : ""));
+    box.style.top = p.start != null ? pct(p.start) : "4px";
     box.addEventListener("click", (e) => e.stopPropagation());
     const h = el("header"), close = el("button", null, "×");
     close.type = "button"; close.setAttribute("aria-label", "Close");
     close.addEventListener("click", () => { openPop = null; renderCal(); });
     const mins = p.tasks.reduce((a, t) => a + (t.minutes || 0), 0);
-    h.append(el("b", null, "Bolus"), el("span", null, mins ? fmtMin(mins) : ""), close);
+    h.append(el("b", null, p.title), el("span", null, mins ? fmtMin(mins) : ""), close);
     const ul = el("ul");
-    if (!p.tasks.length) ul.append(el("li", "empty", "Active work block, no tasks planned."));
+    if (!p.tasks.length) ul.append(el("li", "empty", p.pool === "study" ? "No study items planned." : "Active work block, no tasks planned."));
     p.tasks.forEach((t) => {
       const li = el("li", ["task", t.kind, t.done ? "done" : "", t.priority === "P1" ? "p1" : ""].filter(Boolean).join(" "));
       li.append(el("span", "dot"), el("span", "t", t.title + (t.part ? ` (${t.part})` : "")), el("span", "m", fmtMin(t.minutes)));
