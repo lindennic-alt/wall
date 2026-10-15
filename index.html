@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Wall">
+<title>Wall Schedule</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: clock + weather band on top; below it a DAKboard-style three-day
+   calendar: day headers with the day's forecast, an all-day row, an hour
+   grid with a red "now" line, and tasks gathered into a tappable Bolus. */
+:root {
+  --bg: #f1f3f5; --panel: #ffffff; --ink: #18212b; --muted: #5f6c79;
+  --line: #dde2e7; --line-strong: #c7cfd7;
+  --now: #d7263d; --sun: #d98a12;
+  --shift: #13757d; --bolus: #3f8a2f; --study: #6a55c8; --leisure: #d98a12;
+  --rhythm: #6a55c8; --reserved: #4f6478; --due: #c0283c; --on-block: #ffffff;
+  --font-num: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000; --panel: #0d1117; --ink: #e9edf2; --muted: #8d99a6;
+    --line: #1c232c; --line-strong: #2a333e; --now: #ff4d5e; --sun: #f0a04b;
+    --shift: #1b8a93; --bolus: #4f9e3c; --study: #7a66d6; --leisure: #e39a22;
+    --rhythm: #7a66d6; --reserved: #4d6276; --due: #ff6b7a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #000000; --panel: #0d1117; --ink: #e9edf2; --muted: #8d99a6;
+  --line: #1c232c; --line-strong: #2a333e; --now: #ff4d5e; --sun: #f0a04b;
+  --shift: #1b8a93; --bolus: #4f9e3c; --study: #7a66d6; --leisure: #e39a22;
+  --rhythm: #7a66d6; --reserved: #4d6276; --due: #ff6b7a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body);
+  font-size: clamp(12px, 1.3vw, 18px); line-height: 1.25;
+  -webkit-font-smoothing: antialiased; overflow: hidden;
+}
+.board {
+  height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px;
+  padding-block: max(12px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-bottom));
+  padding-left: max(14px, env(safe-area-inset-left));
+  padding-right: max(14px, env(safe-area-inset-right));
+}
+/* ---------- top band ---------- */
+.top { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5em; }
+.clock {
+  font-family: var(--font-num); font-variation-settings: "wdth" 80; font-weight: 700;
+  font-size: clamp(52px, 8.5vw, 120px); line-height: .85; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+}
+.clock .sec { font-size: .32em; font-weight: 600; color: var(--muted); margin-left: .1em; letter-spacing: 0; }
+.clock .ampm { font-size: .28em; font-weight: 600; color: var(--muted); margin-left: .2em; }
+.date { margin-top: .35em; font-size: 1.3em; color: var(--muted); }
+.date b { color: var(--ink); }
+.now { display: flex; align-items: center; gap: .8em; text-align: right; }
+.now svg { width: clamp(52px, 6.5vw, 90px); height: auto; }
+.now .temp { font-family: var(--font-num); font-variation-settings: "wdth" 85; font-weight: 700;
+  font-size: clamp(42px, 6vw, 86px); line-height: .9; font-variant-numeric: tabular-nums; }
+.now .cond { color: var(--muted); font-size: 1.05em; }
+.now .place { font-size: .8em; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+svg { --icon-sun: var(--sun); --icon-cloud: var(--muted); --icon-drop: var(--shift); }
+
+/* ---------- calendar ---------- */
+.cal { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; min-width: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.cal-head, .allday, .grid { display: grid; grid-template-columns: 3.6em repeat(3, minmax(0, 1fr)); }
+.cal-head { border-bottom: 1px solid var(--line-strong); }
+.cal-head .month { font-size: .8em; color: var(--muted); align-self: center; text-align: center; text-transform: uppercase; letter-spacing: .08em; }
+.dh { display: flex; justify-content: space-between; align-items: center; gap: .5em; padding: .5em .7em; border-left: 1px solid var(--line); min-width: 0; }
+.dh .left { display: flex; align-items: center; gap: .55em; min-width: 0; }
+.dh .num { font-family: var(--font-num); font-weight: 700; font-size: 1.4em; font-variant-numeric: tabular-nums;
+  min-width: 1.85em; height: 1.85em; display: grid; place-items: center; border-radius: 999px; flex: none; }
+.dh.is-today .num { background: var(--now); color: #fff; }
+.dh .wd { font-weight: 700; font-size: 1.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dh.is-today .wd { color: var(--now); }
+.dwx { display: flex; align-items: center; gap: .35em; font-family: var(--font-num); font-variant-numeric: tabular-nums; flex: none; }
+.dwx svg { width: 1.9em; height: 1.9em; }
+.dwx .hi { font-weight: 700; font-size: 1.1em; }
+.dwx .lo { color: var(--muted); }
+.dwx .pp { display: block; font-size: .72em; color: var(--muted); text-align: right; }
+.allday { border-bottom: 1px solid var(--line-strong); min-height: 2.2em; }
+.allday .lab { font-size: .68em; color: var(--muted); text-align: center; padding-top: .8em; text-transform: uppercase; letter-spacing: .06em; }
+.allday .col { border-left: 1px solid var(--line); padding: .3em; display: flex; flex-direction: column; gap: .25em; min-width: 0; }
+.chip { border-radius: 6px; padding: .3em .5em; font-size: .9em; color: var(--on-block); font-weight: 700; border: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: inherit; text-align: left; width: 100%; display: block; }
+.chip .tm { font-weight: 400; margin-left: .4em; opacity: .9; }
+.chip.k-due { background: transparent; color: var(--due); border: 1.5px solid var(--due); }
+button.chip, button.ev { cursor: pointer; }
+.grid { position: relative; min-height: 0; }
+.gutter { position: relative; }
+.hour { position: absolute; right: .5em; transform: translateY(-50%); font-size: .75em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.now-tag { position: absolute; right: .2em; transform: translateY(-50%); background: var(--now); color: #fff; font-weight: 700;
+  font-size: .75em; padding: .1em .35em; border-radius: 4px; font-variant-numeric: tabular-nums; z-index: 3; }
+.day-col { position: relative; border-left: 1px solid var(--line); min-width: 0; }
+.hline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); }
+.now-line { position: absolute; left: 0; right: 0; border-top: 2px solid var(--now); z-index: 3; pointer-events: none; }
+.now-line::before { content: ""; position: absolute; left: -5px; top: -6px; width: 10px; height: 10px; border-radius: 50%; background: var(--now); }
+.ev { position: absolute; border-radius: 6px; padding: .3em .45em; color: var(--on-block); overflow: hidden;
+  font-size: .9em; line-height: 1.2; border: 1px solid rgba(0,0,0,.15); z-index: 1; text-align: left; font-family: inherit; display: block; }
+.ev b { display: block; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev .tm { display: block; font-size: .82em; opacity: .92; font-variant-numeric: tabular-nums; }
+.k-shift { background: var(--shift); } .k-bolus { background: var(--bolus); } .k-study { background: var(--study); }
+.k-leisure { background: var(--leisure); } .k-rhythm { background: var(--rhythm); } .k-reserved { background: var(--reserved); }
+.ev.past { opacity: .55; }
+button.ev:focus-visible, button.chip:focus-visible, .pop button:focus-visible { outline: 3px solid var(--now); outline-offset: 1px; }
+.bar { display: block; height: 3px; border-radius: 2px; background: rgba(255,255,255,.3); margin-top: .35em; overflow: hidden; }
+.bar i { display: block; height: 100%; background: #fff; }
+/* Bolus task list */
+.pop { position: absolute; left: 4px; right: 4px; z-index: 5; background: var(--panel); color: var(--ink);
+  border: 2px solid var(--bolus); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  display: flex; flex-direction: column; max-height: calc(100% - 8px); }
+.pop header { background: var(--bolus); color: var(--on-block); padding: .45em .6em; display: flex; justify-content: space-between; align-items: baseline; gap: .5em; }
+.pop header b { font-family: var(--font-num); font-size: 1.15em; }
+.pop header button { background: none; border: 0; color: inherit; font: inherit; font-size: 1.3em; line-height: 1; cursor: pointer; padding: 0 .2em; }
+.pop ul { list-style: none; margin: 0; padding: .5em .6em .6em; display: flex; flex-direction: column; gap: .45em; overflow: auto; }
+.task { display: grid; grid-template-columns: 1em minmax(0, 1fr) auto; gap: .5em; align-items: baseline; }
+.task .dot { width: .8em; height: .8em; border: 2px solid var(--muted); border-radius: 50%; align-self: center; }
+.task .t { overflow-wrap: anywhere; }
+.task .m { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .9em; }
+.task.done .t { text-decoration: line-through; color: var(--muted); }
+.task.done .dot { background: var(--muted); border-color: var(--muted); }
+.task.reserved .t { font-weight: 700; }
+.task.p1 .t::after { content: " P1"; color: var(--due); font-weight: 700; font-size: .8em; }
+.pop .empty { color: var(--muted); }
+/* bottom strip */
+.strip { border-top: 1px solid var(--line-strong); display: flex; flex-wrap: wrap; gap: .35em .6em; align-items: center; padding: .45em .7em; font-size: .85em; }
+.strip .label { font-size: .75em; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+.pill { border: 1px solid var(--line-strong); border-radius: 999px; padding: .15em .65em; white-space: nowrap; }
+.pill.due { border-color: var(--due); color: var(--due); }
+.strip .status { margin-left: auto; color: var(--muted); font-size: .85em; display: flex; gap: .7em; align-items: center; }
+.strip .status.warn { color: var(--due); }
+button.gear { background: none; border: 1px solid var(--line-strong); color: var(--muted); border-radius: 6px; font: inherit; font-size: .9em; padding: .2em .55em; cursor: pointer; }
+
+/* ---------- setup ---------- */
+.setup { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  display: grid; place-items: center; overflow: auto; z-index: 10;
+  padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+.setup form { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; padding: 1.3em; width: min(560px, 100%); display: grid; gap: .8em; }
+.setup h2 { margin: 0; font-family: var(--font-num); }
+.setup p { margin: 0; color: var(--muted); font-size: .9em; }
+.setup label { display: grid; gap: .25em; font-size: .9em; }
+.setup input, .setup select { font: inherit; padding: .5em .6em; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--ink); min-width: 0; }
+.setup .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .6em; }
+.setup .actions { display: flex; gap: .6em; justify-content: flex-end; flex-wrap: wrap; }
+.setup button { font: inherit; padding: .5em 1em; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--ink); cursor: pointer; }
+.setup button.primary { background: var(--bolus); border-color: var(--bolus); color: #fff; font-weight: 700; }
+.setup input:focus-visible, .setup select:focus-visible, .setup button:focus-visible, button.gear:focus-visible { outline: 3px solid var(--now); outline-offset: 2px; }
+
+@media (max-aspect-ratio: 4/5), (max-width: 700px) {
+  body { overflow: auto; }
+  .board { height: auto; min-height: 100%; }
+  .top { flex-wrap: wrap; }
+  .cal { min-height: 80vh; }
+  .dwx .pp { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="board">
+  <header class="top">
+    <div>
+      <div class="clock" id="clock">--:--</div>
+      <div class="date" id="date"></div>
+    </div>
+    <div class="now" id="now" aria-live="polite"></div>
+  </header>
+  <section class="cal" aria-label="Next three days">
+    <div class="cal-head" id="cal-head"></div>
+    <div class="allday" id="allday"></div>
+    <div class="grid" id="grid"></div>
+    <div class="strip" id="strip"></div>
+  </section>
+</div>
+
+<div class="setup" id="setup" hidden>
+  <form id="setup-form">
+    <h2>Wall setup</h2>
+    <p>Saved only on this iPad. The token needs read-only access to the wall-data
+       repository only (a fine-grained GitHub token).</p>
+    <label for="f-repo">Repository (owner/name)
+      <input id="f-repo" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="lindennic-alt/wall-data"></label>
+    <div class="row">
+      <label for="f-branch">Data branch
+        <input id="f-branch" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="main"></label>
+      <label for="f-token">GitHub token
+        <input id="f-token" type="password" autocomplete="off" placeholder="github_pat_…"></label>
+    </div>
+    <div class="row">
+      <label for="f-place">Place
+        <input id="f-place" autocomplete="off" placeholder="Calgary"></label>
+      <label for="f-lat">Latitude
+        <input id="f-lat" inputmode="decimal" placeholder="51.045"></label>
+      <label for="f-lon">Longitude
+        <input id="f-lon" inputmode="decimal" placeholder="-114.072"></label>
+    </div>
+    <div class="row">
+      <label for="f-units">Temperature
+        <select id="f-units"><option value="celsius">°C</option><option value="fahrenheit">°F</option></select></label>
+      <label for="f-clock">Clock
+        <select id="f-clock"><option value="24">24-hour</option><option value="12">12-hour</option></select></label>
+      <label for="f-theme">Colours
+        <select id="f-theme"><option value="dark">Dark</option><option value="auto">Follow iPad</option><option value="light">Light</option></select></label>
+    </div>
+    <div class="row">
+      <label for="f-from">Day starts (hour)
+        <input id="f-from" inputmode="numeric" placeholder="8"></label>
+      <label for="f-to">Day ends (hour)
+        <input id="f-to" inputmode="numeric" placeholder="22"></label>
+    </div>
+    <div class="actions">
+      <button type="button" id="f-cancel">Cancel</button>
+      <button type="submit" class="primary">Save</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const DEFAULTS = { repo: "lindennic-alt/wall-data", branch: "main", token: "",
+    place: "Calgary", lat: "51.045", lon: "-114.072", units: "celsius", clock: "24",
+    theme: "dark", from: "8", to: "22" };
+  const DATA_EVERY = 5 * 60e3, WX_EVERY = 20 * 60e3, RELOAD_EVERY = 6 * 3600e3, POP_CLOSE = 90e3;
+  const DEMO = new URLSearchParams(location.search).has("demo");
+
+  const store = {
+    get() { try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("wall") || "{}") }; } catch { return { ...DEFAULTS }; } },
+    set(v) { try { localStorage.setItem("wall", JSON.stringify(v)); } catch {} },
+  };
+  let cfg = store.get();
+  let data = null, wx = null, dataErr = "", wxErr = "", lastData = null;
+  let openPop = null, popTimer = null;
+
+  const $ = (id) => document.getElementById(id);
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  const pad = (n) => String(n).padStart(2, "0");
+  const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const toMin = (s) => { if (!s) return null; const [h, m] = s.split(":").map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
+  const fmtMin = (m) => { if (!m) return ""; const h = Math.floor(m / 60), r = m % 60; return h ? (r ? `${h}h${pad(r)}` : `${h}h`) : `${r}m`; };
+  function fmtClock(mins) {
+    const h = Math.floor(mins / 60) % 24, m = mins % 60;
+    if (cfg.clock === "24") return `${pad(h)}:${pad(m)}`;
+    return `${(h % 12) || 12}:${pad(m)}${h < 12 ? "a" : "p"}`;
+  }
+  function applyTheme() {
+    const r = document.documentElement;
+    if (cfg.theme === "auto") r.removeAttribute("data-theme"); else r.setAttribute("data-theme", cfg.theme);
+  }
+
+  /* ---------- weather ---------- */
+  const SVG = {
+    sun: '<circle cx="24" cy="24" r="8" fill="var(--icon-sun)"/><g stroke="var(--icon-sun)" stroke-width="3" stroke-linecap="round"><path d="M24 6v5M24 37v5M6 24h5M37 24h5M11.3 11.3l3.5 3.5M33.2 33.2l3.5 3.5M11.3 36.7l3.5-3.5M33.2 14.8l3.5-3.5"/></g>',
+    moon: '<path d="M30 8a16 16 0 1 0 10 26A13 13 0 0 1 30 8z" fill="var(--icon-cloud)"/>',
+    cloud: '<path d="M14 36h20a8 8 0 0 0 0-16 11 11 0 0 0-21 3 6.5 6.5 0 0 0 1 13z" fill="var(--icon-cloud)"/>',
+    part: '<circle cx="17" cy="17" r="7" fill="var(--icon-sun)"/><g stroke="var(--icon-sun)" stroke-width="2.5" stroke-linecap="round"><path d="M17 4v3M4 17h3M7.8 7.8l2 2M26.2 7.8l-2 2"/></g><path d="M16 40h18a7.5 7.5 0 0 0 0-15 10 10 0 0 0-19 3 6 6 0 0 0 1 12z" fill="var(--icon-cloud)"/>',
+    rain: '<path d="M14 30h20a8 8 0 0 0 0-16 11 11 0 0 0-21 3 6.5 6.5 0 0 0 1 13z" fill="var(--icon-cloud)"/><g stroke="var(--icon-drop)" stroke-width="3" stroke-linecap="round"><path d="M17 35l-2 6M25 35l-2 6M33 35l-2 6"/></g>',
+    snow: '<path d="M14 30h20a8 8 0 0 0 0-16 11 11 0 0 0-21 3 6.5 6.5 0 0 0 1 13z" fill="var(--icon-cloud)"/><g fill="var(--icon-drop)"><circle cx="16" cy="38" r="2.4"/><circle cx="24" cy="41" r="2.4"/><circle cx="32" cy="38" r="2.4"/></g>',
+    fog: '<g stroke="var(--icon-cloud)" stroke-width="3" stroke-linecap="round"><path d="M8 18h32M12 25h28M8 32h30M14 39h22"/></g>',
+    storm: '<path d="M14 28h20a8 8 0 0 0 0-16 11 11 0 0 0-21 3 6.5 6.5 0 0 0 1 13z" fill="var(--icon-cloud)"/><path d="M25 30l-6 9h5l-3 7 9-11h-5l3-5z" fill="var(--icon-sun)"/>',
+  };
+  function wmo(code, isDay = 1) {
+    if (code === 0) return [isDay ? "sun" : "moon", "Clear"];
+    if (code <= 2) return [isDay ? "part" : "cloud", code === 1 ? "Mostly clear" : "Partly cloudy"];
+    if (code === 3) return ["cloud", "Overcast"];
+    if (code <= 48) return ["fog", "Fog"];
+    if (code <= 57) return ["rain", "Drizzle"];
+    if (code <= 67) return ["rain", code >= 66 ? "Freezing rain" : "Rain"];
+    if (code <= 77) return ["snow", "Snow"];
+    if (code <= 82) return ["rain", "Showers"];
+    if (code <= 86) return ["snow", "Snow showers"];
+    return ["storm", "Thunderstorm"];
+  }
+  function icon(name, label) {
+    const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    s.setAttribute("viewBox", "0 0 48 48"); s.setAttribute("role", "img"); s.setAttribute("aria-label", label);
+    s.innerHTML = SVG[name];
+    return s;
+  }
+  const deg = (t) => (t == null ? "–" : `${Math.round(t)}°`);
+
+  /* ---------- loading ---------- */
+  async function loadData() {
+    try {
+      if (DEMO) { data = demoData(); dataErr = ""; lastData = new Date(); render(); return; }
+      let res;
+      if (cfg.token && cfg.repo) {
+        const url = `https://api.github.com/repos/${cfg.repo}/contents/display/schedule.json` +
+          (cfg.branch ? `?ref=${encodeURIComponent(cfg.branch)}` : "");
+        res = await fetch(url, { cache: "no-store", headers: { Authorization: `Bearer ${cfg.token}`, Accept: "application/vnd.github.raw+json" } });
+      } else {
+        res = await fetch("schedule.json", { cache: "no-store" });
+      }
+      if (res.status === 401 || res.status === 403) throw new Error("GitHub refused the token. Check it in Setup.");
+      if (res.status === 404) throw new Error("Schedule not found. Check the repository and branch in Setup.");
+      if (!res.ok) throw new Error(`Couldn't load the schedule (HTTP ${res.status}).`);
+      data = await res.json(); dataErr = ""; lastData = new Date();
+    } catch (e) {
+      dataErr = e instanceof TypeError ? "Offline: showing the last schedule loaded." : e.message;
+    }
+    render();
+  }
+  async function loadWeather() {
+    try {
+      const q = new URLSearchParams({ latitude: cfg.lat, longitude: cfg.lon, timezone: "auto", forecast_days: "4",
+        temperature_unit: cfg.units,
+        current: "temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m",
+        daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset" });
+      const res = await fetch(`https://api.open-meteo.com/v1/forecast?${q}`, { cache: "no-store" });
+      if (!res.ok) throw new Error();
+      wx = await res.json(); wxErr = "";
+    } catch { wxErr = "Weather unavailable"; }
+    render();
+  }
+
+  /* ---------- top band ---------- */
+  function renderClock() {
+    const d = new Date(), h = d.getHours();
+    const c = $("clock"); c.textContent = "";
+    c.append(cfg.clock === "24" ? `${pad(h)}:${pad(d.getMinutes())}` : `${(h % 12) || 12}:${pad(d.getMinutes())}`);
+    c.append(el("span", "sec", pad(d.getSeconds())));
+    if (cfg.clock !== "24") c.append(el("span", "ampm", h < 12 ? "am" : "pm"));
+    const dt = $("date"); dt.textContent = "";
+    dt.append(el("b", null, d.toLocaleDateString(undefined, { weekday: "long" })),
+      ` · ${d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}`);
+  }
+  function renderNow() {
+    const box = $("now"); box.textContent = "";
+    if (!wx || !wx.current) { box.append(el("div", "cond", wxErr || "Loading weather…")); return; }
+    const c = wx.current, [name, label] = wmo(c.weather_code, c.is_day);
+    const t = (s) => fmtClock(toMin(s.slice(11, 16)));
+    const text = el("div");
+    text.append(el("div", "temp", deg(c.temperature_2m)),
+      el("div", "cond", `${label} · feels ${deg(c.apparent_temperature)} · wind ${Math.round(c.wind_speed_10m)} km/h`),
+      el("div", "place", `${cfg.place} · sunrise ${t(wx.daily.sunrise[0])} · sunset ${t(wx.daily.sunset[0])}`));
+    box.append(icon(name, label), text);
+  }
+  function dayWeather(key) {
+    if (!wx || !wx.daily) return null;
+    const i = wx.daily.time.indexOf(key);
+    if (i < 0) return null;
+    const d = wx.daily;
+    return { code: d.weather_code[i], hi: d.temperature_2m_max[i], lo: d.temperature_2m_min[i], pop: d.precipitation_probability_max[i] };
+  }
+
+  /* ---------- calendar ---------- */
+  function kindOf(it) {
+    if (it.kind === "rhythm") return /study/i.test(it.title) ? "study" : "leisure";
+    return it.kind;
+  }
+  // One day's data -> timed events + all-day chips. Tasks become one Bolus.
+  function dayModel(key) {
+    const info = (data && data.days && data.days[key]) || { items: [] };
+    const timed = [], allday = [];
+    const tasks = info.items.filter((i) => i.kind === "task" || i.kind === "reserved");
+    const block = info.items.find((i) => i.kind === "rhythm" && /bolus/i.test(i.title));
+    for (const it of info.items) {
+      if (it === block || it.kind === "task" || it.kind === "reserved") continue;
+      if (it.kind === "deadline") { allday.push({ kind: "due", title: `Due: ${it.title}` }); continue; }
+      const s = toMin(it.start);
+      if (s == null) { allday.push({ kind: kindOf(it), title: it.kind === "shift" ? `Shift · ${it.title}` : it.title }); continue; }
+      let e = it.kind === "shift" ? toMin(it.end) : s + (it.minutes || 60);
+      if (e == null || e <= s) e = 24 * 60;   // overnight: clip at midnight
+      timed.push({ kind: kindOf(it), title: it.title, start: s, end: e, sub: it.kind === "shift" && it.type && it.type !== "ED" ? it.type : "" });
+    }
+    if (tasks.length || block) {
+      const mins = tasks.reduce((a, t) => a + (t.minutes || 0), 0);
+      const s = toMin(block && block.start) ?? toMin(info.start);
+      const bolus = { kind: "bolus", title: "Bolus", tasks, key, done: tasks.filter((t) => t.done).length };
+      if (s != null) timed.push({ ...bolus, start: s, end: Math.min(24 * 60, s + ((block && block.minutes) || mins || info.free || 60)) });
+      else allday.push(bolus);
+    }
+    return { timed, allday };
+  }
+  // Side-by-side lanes for overlapping events.
+  function lanes(evs) {
+    evs.sort((a, b) => a.start - b.start || b.end - a.end);
+    let cluster = [], clusterEnd = -1;
+    const flush = () => { const n = Math.max(...cluster.map((e) => e.lane)) + 1; cluster.forEach((e) => { e.lanes = n; }); cluster = []; };
+    for (const e of evs) {
+      if (cluster.length && e.start >= clusterEnd) flush();
+      const used = new Set(cluster.filter((c) => c.end > e.start).map((c) => c.lane));
+      e.lane = 0; while (used.has(e.lane)) e.lane++;
+      cluster.push(e); clusterEnd = Math.max(clusterEnd, e.end);
+    }
+    if (cluster.length) flush();
+    return evs;
+  }
+
+  function renderCal() {
+    const today = new Date(), keys = [0, 1, 2].map((n) => iso(addDays(today, n)));
+    const models = keys.map(dayModel);
+    let from = (parseInt(cfg.from, 10) || 8) * 60, to = (parseInt(cfg.to, 10) || 22) * 60;
+    models.forEach((m) => m.timed.forEach((e) => { from = Math.min(from, Math.floor(e.start / 60) * 60); to = Math.max(to, Math.ceil(e.end / 60) * 60); }));
+    from = Math.max(0, from); to = Math.min(24 * 60, to);
+
+    const head = $("cal-head"); head.textContent = "";
+    head.append(el("div", "month", today.toLocaleDateString(undefined, { month: "short" })));
+    keys.forEach((k, i) => {
+      const d = addDays(today, i), h = el("div", "dh" + (i === 0 ? " is-today" : "")), left = el("div", "left");
+      left.append(el("div", "num", String(d.getDate())),
+        el("div", "wd", i === 0 ? "Today" : i === 1 ? "Tomorrow" : d.toLocaleDateString(undefined, { weekday: "long" })));
+      h.append(left);
+      const w = dayWeather(k);
+      if (w) {
+        const [nm, label] = wmo(w.code), box = el("div", "dwx"), t = el("div");
+        t.append(el("span", "hi", deg(w.hi)), " ", el("span", "lo", deg(w.lo)));
+        if (w.pop != null) t.append(el("span", "pp", `${w.pop}%`));
+        box.append(icon(nm, label), t);
+        h.append(box);
+      }
+      head.append(h);
+    });
+
+    const ad = $("allday"); ad.textContent = "";
+    ad.append(el("div", "lab", "All day"));
+    models.forEach((m) => {
+      const col = el("div", "col");
+      m.allday.forEach((a) => col.append(a.kind === "bolus" ? bolusButton(a, "chip k-bolus") : el("div", `chip k-${a.kind}`, a.title)));
+      ad.append(col);
+    });
+
+    const grid = $("grid"); grid.textContent = "";
+    const span = to - from, pct = (m) => `${((m - from) / span) * 100}%`;
+    const gutter = el("div", "gutter");
+    for (let m = from + 60; m < to; m += 60) { const h = el("div", "hour", fmtClock(m)); h.style.top = pct(m); gutter.append(h); }
+    const nowMin = today.getHours() * 60 + today.getMinutes();
+    if (nowMin >= from && nowMin <= to) { const t = el("div", "now-tag", fmtClock(nowMin)); t.style.top = pct(nowMin); gutter.append(t); }
+    grid.append(gutter);
+    models.forEach((m, i) => {
+      const col = el("div", "day-col");
+      for (let h = from + 60; h < to; h += 60) { const l = el("div", "hline"); l.style.top = pct(h); col.append(l); }
+      lanes(m.timed).forEach((e) => {
+        const isBolus = e.kind === "bolus";
+        const box = isBolus ? bolusButton(e, "ev k-bolus") : el("div", `ev k-${e.kind}`);
+        if (!isBolus) {
+          box.append(el("b", null, e.title));
+          box.append(el("span", "tm", `${fmtClock(e.start)}–${e.end >= 1440 ? "24:00" : fmtClock(e.end)}${e.sub ? ` · ${e.sub}` : ""}`));
+        }
+        if (i === 0 && e.end <= nowMin) box.classList.add("past");
+        box.style.top = pct(Math.max(e.start, from));
+        box.style.height = `calc(${((Math.min(e.end, to) - Math.max(e.start, from)) / span) * 100}% - 2px)`;
+        box.style.left = `calc(${(e.lane / e.lanes) * 100}% + 3px)`;
+        box.style.width = `calc(${100 / e.lanes}% - 6px)`;
+        col.append(box);
+      });
+      if (i === 0 && nowMin >= from && nowMin <= to) { const l = el("div", "now-line"); l.style.top = pct(nowMin); col.append(l); }
+      if (openPop && openPop.key === keys[i]) col.append(popover(openPop, m.timed.find((e) => e.kind === "bolus"), pct));
+      grid.append(col);
+    });
+  }
+
+  function bolusButton(b, cls) {
+    const btn = el("button", cls);
+    btn.type = "button";
+    btn.setAttribute("aria-expanded", openPop && openPop.key === b.key ? "true" : "false");
+    btn.append(el("b", null, "Bolus"));
+    const bits = [b.tasks.length ? `${b.tasks.length} task${b.tasks.length > 1 ? "s" : ""}` : "active work"];
+    if (b.done) bits.push(`${b.done} done`);
+    if (b.start != null) bits.unshift(`${fmtClock(b.start)}–${fmtClock(b.end)}`);
+    btn.append(el("span", "tm", bits.join(" · ")));
+    if (b.tasks.length && b.start != null) {
+      const bar = el("span", "bar"), fill = el("i");
+      fill.style.width = `${Math.round((b.done / b.tasks.length) * 100)}%`;
+      bar.append(fill); btn.append(bar);
+    }
+    btn.addEventListener("click", (ev) => { ev.stopPropagation(); togglePop(b); });
+    return btn;
+  }
+  function togglePop(b) {
+    openPop = openPop && openPop.key === b.key ? null : { key: b.key, tasks: b.tasks };
+    clearTimeout(popTimer);
+    if (openPop) popTimer = setTimeout(() => { openPop = null; renderCal(); }, POP_CLOSE);
+    renderCal();
+  }
+  function popover(p, timedBolus, pct) {
+    const box = el("div", "pop");
+    box.style.top = timedBolus ? pct(timedBolus.start) : "4px";
+    box.addEventListener("click", (e) => e.stopPropagation());
+    const h = el("header"), close = el("button", null, "×");
+    close.type = "button"; close.setAttribute("aria-label", "Close");
+    close.addEventListener("click", () => { openPop = null; renderCal(); });
+    const mins = p.tasks.reduce((a, t) => a + (t.minutes || 0), 0);
+    h.append(el("b", null, "Bolus"), el("span", null, mins ? fmtMin(mins) : ""), close);
+    const ul = el("ul");
+    if (!p.tasks.length) ul.append(el("li", "empty", "Active work block, no tasks planned."));
+    p.tasks.forEach((t) => {
+      const li = el("li", ["task", t.kind, t.done ? "done" : "", t.priority === "P1" ? "p1" : ""].filter(Boolean).join(" "));
+      li.append(el("span", "dot"), el("span", "t", t.title + (t.part ? ` (${t.part})` : "")), el("span", "m", fmtMin(t.minutes)));
+      ul.append(li);
+    });
+    box.append(h, ul);
+    // keep the list on screen when the block sits low in the day
+    requestAnimationFrame(() => {
+      const col = box.parentElement;
+      if (col && box.offsetTop + box.offsetHeight > col.clientHeight) box.style.top = `${Math.max(4, col.clientHeight - box.offsetHeight - 4)}px`;
+    });
+    return box;
+  }
+  document.addEventListener("click", () => { if (openPop) { openPop = null; renderCal(); } });
+
+  function renderStrip() {
+    const f = $("strip"); f.textContent = "";
+    const k = iso(new Date());
+    const wk = data && data.weeks ? data.weeks.find((w) => w.week <= k && k <= w.end) : null;
+    if (wk && wk.organize.length) {
+      f.append(el("span", "label", "This week"));
+      wk.organize.forEach((o) => {
+        const when = o.days.length ? o.days.map((d) => new Date(d + "T12:00").toLocaleDateString(undefined, { weekday: "short" })).join(", ") : "pick a day";
+        f.append(el("span", "pill", `${o.title}${o.per_week > 1 ? ` ×${o.per_week}` : ""} · ${when}`));
+      });
+    }
+    const s = data && data.summary;
+    if (s && s.overdue.length) f.append(el("span", "pill due", `${s.overdue.length} overdue`));
+    const st = el("span", "status" + (dataErr ? " warn" : ""),
+      dataErr || (lastData ? `Updated ${lastData.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : "Loading…"));
+    const gear = el("button", "gear", "Setup");
+    gear.type = "button";
+    gear.addEventListener("click", (e) => { e.stopPropagation(); openSetup(); });
+    st.append(gear);
+    f.append(st);
+  }
+
+  function render() { applyTheme(); renderClock(); renderNow(); renderCal(); renderStrip(); }
+
+  /* ---------- setup ---------- */
+  const FIELDS = ["repo", "branch", "token", "place", "lat", "lon", "units", "clock", "theme", "from", "to"];
+  function openSetup() { FIELDS.forEach((k) => { $("f-" + k).value = cfg[k] || ""; }); $("setup").hidden = false; $("f-repo").focus(); }
+  $("f-cancel").addEventListener("click", () => { $("setup").hidden = true; });
+  $("setup").addEventListener("click", (e) => e.stopPropagation());
+  $("setup-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    FIELDS.forEach((k) => { cfg[k] = $("f-" + k).value.trim() || (k === "token" ? "" : DEFAULTS[k]); });
+    store.set(cfg); $("setup").hidden = true;
+    render(); loadData(); loadWeather();
+  });
+
+  /* ---------- keep the screen awake ---------- */
+  async function wake() { try { if ("wakeLock" in navigator && document.visibilityState === "visible") await navigator.wakeLock.request("screen"); } catch {} }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { wake(); loadData(); } });
+
+  /* ---------- sample data (?demo) ---------- */
+  function demoData() {
+    const t = new Date(), k = (n) => iso(addDays(t, n));
+    return {
+      days: {
+        [k(0)]: { free: 240, start: "", items: [
+          { kind: "shift", title: "ED", type: "ED", start: "07:00", end: "15:00" },
+          { kind: "rhythm", title: "Study session", minutes: 60, start: "16:30" },
+          { kind: "rhythm", title: "Time with family", minutes: 180, start: "18:30" },
+          { kind: "task", id: "T-032", title: "Reply to program email", minutes: 30, priority: "P2", done: true },
+          { kind: "task", id: "T-011", title: "Book car service", minutes: 10, priority: "P3" },
+          { kind: "task", id: "T-003", title: "Review notes", minutes: 15, priority: "P3" } ] },
+        [k(1)]: { free: 240, start: "", items: [
+          { kind: "deadline", id: "T-040", title: "Submit a form", priority: "P1" },
+          { kind: "rhythm", title: "Productive bolus", minutes: 240, start: "10:00" },
+          { kind: "task", id: "T-006", title: "Phone call", minutes: 15, priority: "P3" },
+          { kind: "task", id: "T-014", title: "Pay a bill", minutes: 30, priority: "P3" },
+          { kind: "task", id: "T-016", title: "Run errands", minutes: 30, priority: "P3" },
+          { kind: "reserved", id: "T-021", title: "Batch tasks", minutes: 120, priority: "P3" } ] },
+        [k(2)]: { free: 180, start: "", items: [
+          { kind: "shift", title: "ED", type: "ED", start: "14:00", end: "22:00" },
+          { kind: "rhythm", title: "Time with friends", minutes: 120 } ] },
+      },
+      weeks: [{ week: k(-2), end: k(4), organize: [
+        { title: "Productive bolus", per_week: 1, days: [k(1)] }, { title: "Study session", per_week: 1, days: [k(0)] },
+        { title: "Time with family", per_week: 1, days: [k(0)] }, { title: "Time with friends", per_week: 1, days: [] } ] }],
+      summary: { open: 31, open_minutes: 1135, overdue: [], quick_wins: [] },
+    };
+  }
+
+  /* ---------- start ---------- */
+  render();
+  if (!DEMO && !cfg.token && location.protocol !== "file:") {
+    fetch("schedule.json", { method: "HEAD" }).then((r) => { if (!r.ok) openSetup(); }).catch(openSetup);
+  }
+  loadData(); loadWeather(); wake();
+  let lastMinute = -1, lastDay = iso(new Date());
+  setInterval(() => {
+    renderClock();
+    const d = new Date();
+    if (d.getMinutes() !== lastMinute) {
+      lastMinute = d.getMinutes();
+      if (iso(d) !== lastDay) { lastDay = iso(d); openPop = null; loadWeather(); }
+      renderCal();
+    }
+  }, 1000);
+  setInterval(loadData, DATA_EVERY);
+  setInterval(loadWeather, WX_EVERY);
+  setTimeout(() => location.reload(), RELOAD_EVERY);
+})();
+</script>
+</body>
+</html>
