@@ -118,7 +118,7 @@ button.chip, button.ev { cursor: pointer; }
 .ev b { display: block; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ev .tm { display: block; font-size: .82em; opacity: .92; font-variant-numeric: tabular-nums; }
 .k-shift { background: var(--shift); } .k-bolus { background: var(--bolus); } .k-study { background: var(--study); }
-.k-leisure { background: var(--leisure); } .k-exercise { background: var(--exercise); }
+.k-leisure { background: var(--leisure); } .k-meal { background: #b4507a; } .k-errand { background: #5b6b7d; } .k-exercise { background: var(--exercise); }
 .ev.k-quiet { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
 .ev.k-quiet b { font-weight: 400; } .k-rhythm { background: var(--rhythm); } .k-reserved { background: var(--reserved); }
 .ev.past { opacity: .55; }
@@ -405,7 +405,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   // A day planned in time blocks: every block goes on the grid; Bolus and
   // Study blocks open the tasks planned into them.
   const BLOCK_KIND = { shift: "shift", academic: "shift", exercise: "exercise", bolus: "bolus", study: "study",
-    leisure: "leisure", buffer: "quiet", rest: "quiet" };
+    leisure: "leisure", buffer: "quiet", rest: "quiet", mealprep: "meal", errand: "errand" };
   function blockModel(key, info) {
     const timed = [], allday = [];
     const tasks = info.items.filter((i) => i.kind === "task" || i.kind === "reserved");
