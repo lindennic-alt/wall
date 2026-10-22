@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
 <style>
-/* Layout: clock + weather band on top; below it a DAKboard-style three-day
+/* Layout: clock + weather band on top; below it a DAKboard-style seven-day
    calendar: day headers with the day's forecast, an all-day row, an hour
    grid with a red "now" line, and tasks gathered into a tappable Bolus. */
 :root {
@@ -74,7 +74,14 @@ svg { --icon-sun: var(--sun); --icon-cloud: var(--muted); --icon-drop: var(--shi
 /* ---------- calendar ---------- */
 .cal { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; min-width: 0;
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.cal-head, .allday, .grid { display: grid; grid-template-columns: 3.6em repeat(3, minmax(0, 1fr)); }
+.cal-head, .allday, .grid { display: grid; grid-template-columns: 3.6em repeat(var(--days, 7), minmax(0, 1fr)); }
+/* a week at a glance: compact day headers (weather under the date) */
+.cal.wk .dh { flex-wrap: wrap; padding: .4em .45em; gap: .15em .4em; }
+.cal.wk .dh .num { font-size: 1.1em; min-width: 1.7em; height: 1.7em; }
+.cal.wk .dh .wd { font-size: .95em; }
+.cal.wk .dwx svg { width: 1.5em; height: 1.5em; }
+.cal.wk .dwx .pp { display: inline; margin-left: .3em; }
+.cal.wk .ev, .cal.wk .chip { font-size: .8em; }
 .cal-head { border-bottom: 1px solid var(--line-strong); }
 .cal-head .month { font-size: .8em; color: var(--muted); align-self: center; text-align: center; text-transform: uppercase; letter-spacing: .08em; }
 .dh { display: flex; justify-content: space-between; align-items: center; gap: .5em; padding: .5em .7em; border-left: 1px solid var(--line); min-width: 0; }
@@ -118,10 +125,11 @@ button.chip, button.ev { cursor: pointer; }
 button.ev:focus-visible, button.chip:focus-visible, .pop button:focus-visible { outline: 3px solid var(--now); outline-offset: 1px; }
 .bar { display: block; height: 3px; border-radius: 2px; background: rgba(255,255,255,.3); margin-top: .35em; overflow: hidden; }
 .bar i { display: block; height: 100%; background: #fff; }
-/* Bolus task list */
-.pop { position: absolute; left: 4px; right: 4px; z-index: 5; background: var(--panel); color: var(--ink);
+/* Bolus task list: wider than a day column; opens leftward on the right half of the week */
+.pop { position: absolute; left: 4px; width: max(calc(100% - 8px), 19em); z-index: 5; background: var(--panel); color: var(--ink);
   border: 2px solid var(--bolus); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
   display: flex; flex-direction: column; max-height: calc(100% - 8px); }
+.pop.flip { left: auto; right: 4px; }
 .pop.study { border-color: var(--study); }
 .pop.study header { background: var(--study); }
 .pop header { background: var(--bolus); color: var(--on-block); padding: .45em .6em; display: flex; justify-content: space-between; align-items: baseline; gap: .5em; }
@@ -179,7 +187,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     </div>
     <div class="now" id="now" aria-live="polite"></div>
   </header>
-  <section class="cal" aria-label="Next three days">
+  <section class="cal" id="cal" aria-label="The next seven days">
     <div class="cal-head" id="cal-head"></div>
     <div class="allday" id="allday"></div>
     <div class="grid" id="grid"></div>
@@ -235,6 +243,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   const DEFAULTS = { repo: "lindennic-alt/wall-data", branch: "main", token: "",
     place: "Calgary", lat: "51.045", lon: "-114.072", units: "celsius", clock: "24",
     theme: "dark", from: "8", to: "22" };
+  const NDAYS = 7;
   const DATA_EVERY = 5 * 60e3, WX_EVERY = 20 * 60e3, RELOAD_EVERY = 6 * 3600e3, POP_CLOSE = 90e3;
   const DEMO = new URLSearchParams(location.search).has("demo");
 
@@ -322,7 +331,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   }
   async function loadWeather() {
     try {
-      const q = new URLSearchParams({ latitude: cfg.lat, longitude: cfg.lon, timezone: "auto", forecast_days: "4",
+      const q = new URLSearchParams({ latitude: cfg.lat, longitude: cfg.lon, timezone: "auto", forecast_days: String(NDAYS + 1),
         temperature_unit: cfg.units,
         current: "temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m",
         daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset" });
@@ -440,7 +449,8 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   }
 
   function renderCal() {
-    const today = new Date(), keys = [0, 1, 2].map((n) => iso(addDays(today, n)));
+    const today = new Date(), keys = Array.from({ length: NDAYS }, (_, n) => iso(addDays(today, n)));
+    const cal = $("cal"); cal.style.setProperty("--days", NDAYS); cal.classList.toggle("wk", NDAYS > 3);
     const models = keys.map(dayModel);
     let from = (parseInt(cfg.from, 10) || 8) * 60, to = (parseInt(cfg.to, 10) || 22) * 60;
     models.forEach((m) => m.timed.filter((e) => e.kind !== "quiet").forEach((e) => { from = Math.min(from, Math.floor(e.start / 60) * 60); to = Math.max(to, Math.ceil(e.end / 60) * 60); }));
@@ -451,7 +461,8 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     keys.forEach((k, i) => {
       const d = addDays(today, i), h = el("div", "dh" + (i === 0 ? " is-today" : "")), left = el("div", "left");
       left.append(el("div", "num", String(d.getDate())),
-        el("div", "wd", i === 0 ? "Today" : i === 1 ? "Tomorrow" : d.toLocaleDateString(undefined, { weekday: "long" })));
+        el("div", "wd", i === 0 ? "Today" : NDAYS > 3 ? d.toLocaleDateString(undefined, { weekday: "short" })
+          : i === 1 ? "Tomorrow" : d.toLocaleDateString(undefined, { weekday: "long" })));
       h.append(left);
       const w = dayWeather(k);
       if (w) {
@@ -497,7 +508,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
         col.append(box);
       });
       if (i === 0 && nowMin >= from && nowMin <= to) { const l = el("div", "now-line"); l.style.top = pct(nowMin); col.append(l); }
-      if (openPop && openPop.key === keys[i]) col.append(popover(openPop, pct));
+      if (openPop && openPop.key === keys[i]) col.append(popover(openPop, pct, i >= NDAYS / 2));
       grid.append(col);
     });
   }
@@ -527,8 +538,8 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     renderCal();
   }
   function endText(e) { return e.endLabel ? fmtClock(toMin(e.endLabel)) : e.end >= 1440 ? "24:00" : fmtClock(e.end); }
-  function popover(p, pct) {
-    const box = el("div", "pop" + (p.pool === "study" ? " study" : ""));
+  function popover(p, pct, flip) {
+    const box = el("div", "pop" + (p.pool === "study" ? " study" : "") + (flip ? " flip" : ""));
     box.style.top = p.start != null ? pct(p.start) : "4px";
     box.addEventListener("click", (e) => e.stopPropagation());
     const h = el("header"), close = el("button", null, "×");
