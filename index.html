@@ -243,7 +243,11 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   const DEFAULTS = { repo: "lindennic-alt/wall-data", branch: "main", token: "",
     place: "Calgary", lat: "51.045", lon: "-114.072", units: "celsius", clock: "24",
     theme: "dark", from: "8", to: "22" };
-  const NDAYS = 7;
+  // EMBED: the same page published as a Claude artifact (desktop/phone browser).
+  // No weather there (the artifact can't reach the forecast service) and no Setup.
+  const EMBED = !!window.WALL_EMBED;
+  const daysFor = () => (EMBED && window.innerWidth < 760 ? 3 : 7);
+  let NDAYS = daysFor();
   const DATA_EVERY = 5 * 60e3, WX_EVERY = 20 * 60e3, RELOAD_EVERY = 6 * 3600e3, POP_CLOSE = 90e3;
   const DEMO = new URLSearchParams(location.search).has("demo");
 
@@ -330,6 +334,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     render();
   }
   async function loadWeather() {
+    if (EMBED) return;
     try {
       const q = new URLSearchParams({ latitude: cfg.lat, longitude: cfg.lon, timezone: "auto", forecast_days: String(NDAYS + 1),
         temperature_unit: cfg.units,
@@ -579,10 +584,12 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     if (s && s.overdue.length) f.append(el("span", "pill due", `${s.overdue.length} overdue`));
     const st = el("span", "status" + (dataErr ? " warn" : ""),
       dataErr || (lastData ? `Updated ${lastData.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : "Loading…"));
-    const gear = el("button", "gear", "Setup");
-    gear.type = "button";
-    gear.addEventListener("click", (e) => { e.stopPropagation(); openSetup(); });
-    st.append(gear);
+    if (!EMBED) {
+      const gear = el("button", "gear", "Setup");
+      gear.type = "button";
+      gear.addEventListener("click", (e) => { e.stopPropagation(); openSetup(); });
+      st.append(gear);
+    }
     f.append(st);
   }
 
@@ -636,10 +643,14 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
 
   /* ---------- start ---------- */
   render();
-  if (!DEMO && !cfg.token && location.protocol !== "file:") {
+  if (EMBED) {
+    $("now").hidden = true;
+    window.addEventListener("resize", () => { const n = daysFor(); if (n !== NDAYS) { NDAYS = n; renderCal(); } });
+  }
+  if (!EMBED && !DEMO && !cfg.token && location.protocol !== "file:") {
     fetch("schedule.json", { method: "HEAD" }).then((r) => { if (!r.ok) openSetup(); }).catch(openSetup);
   }
-  loadData(); loadWeather(); wake();
+  loadData(); loadWeather(); if (!EMBED) wake();
   let lastMinute = -1, lastDay = iso(new Date());
   setInterval(() => {
     renderClock();
