@@ -72,9 +72,20 @@ body {
 svg { --icon-sun: var(--sun); --icon-cloud: var(--muted); --icon-drop: var(--shift); }
 
 /* ---------- calendar ---------- */
-.cal { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; min-width: 0;
+.cal { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; min-width: 0;
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.cal-head, .allday, .grid { display: grid; grid-template-columns: 3.6em repeat(var(--days, 7), minmax(0, 1fr)); }
+/* Seven days side by side; --colw (set in JS) shows three at a time on the
+   wall, the rest a swipe to the right. The time gutter stays put. */
+.scroller { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; overflow: auto;
+  scroll-snap-type: x mandatory; scroll-padding-left: 3.6em; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.cal-head, .allday, .grid { display: grid; grid-template-columns: 3.6em repeat(var(--days, 7), var(--colw, minmax(0, 1fr)));
+  width: max-content; min-width: 100%; }
+.cal-head .month, .allday .lab, .gutter { position: sticky; left: 0; z-index: 4; background: var(--panel); }
+/* On the wall each hour has a fixed height and the day scrolls; the day
+   headers and all-day row stay on top. */
+.cal-top { position: sticky; top: 0; z-index: 6; background: var(--panel); width: max-content; min-width: 100%; }
+.dh { scroll-snap-align: start; }
+body.wall { font-size: clamp(14px, 1.6vw, 21px); }
 /* a week at a glance: compact day headers (weather under the date) */
 .cal.wk .dh { flex-wrap: wrap; padding: .4em .45em; gap: .15em .4em; }
 .cal.wk .dh .num { font-size: 1.1em; min-width: 1.7em; height: 1.7em; }
@@ -105,7 +116,6 @@ svg { --icon-sun: var(--sun); --icon-cloud: var(--muted); --icon-drop: var(--shi
 .chip.k-due { background: transparent; color: var(--due); border: 1.5px solid var(--due); }
 button.chip, button.ev { cursor: pointer; }
 .grid { position: relative; min-height: 0; }
-.gutter { position: relative; }
 .hour { position: absolute; right: .5em; transform: translateY(-50%); font-size: .75em; color: var(--muted); font-variant-numeric: tabular-nums; }
 .now-tag { position: absolute; right: .2em; transform: translateY(-50%); background: var(--now); color: #fff; font-weight: 700;
   font-size: .75em; padding: .1em .35em; border-radius: 4px; font-variant-numeric: tabular-nums; z-index: 3; }
@@ -115,7 +125,7 @@ button.chip, button.ev { cursor: pointer; }
 .now-line::before { content: ""; position: absolute; left: -5px; top: -6px; width: 10px; height: 10px; border-radius: 50%; background: var(--now); }
 .ev { position: absolute; border-radius: 6px; padding: .3em .45em; color: var(--on-block); overflow: hidden;
   font-size: .9em; line-height: 1.2; border: 1px solid rgba(0,0,0,.15); z-index: 1; text-align: left; font-family: inherit; display: block; }
-.ev b { display: block; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; font-weight: 700; overflow: hidden; overflow-wrap: anywhere; }
 .ev .tm { display: block; font-size: .82em; opacity: .92; font-variant-numeric: tabular-nums; }
 .k-shift { background: var(--shift); } .k-bolus { background: var(--bolus); } .k-study { background: var(--study); }
 .k-leisure { background: var(--leisure); } .k-meal { background: #b4507a; } .k-errand { background: #5b6b7d; } .k-exercise { background: var(--exercise); }
@@ -188,9 +198,13 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     <div class="now" id="now" aria-live="polite"></div>
   </header>
   <section class="cal" id="cal" aria-label="The next seven days">
-    <div class="cal-head" id="cal-head"></div>
-    <div class="allday" id="allday"></div>
-    <div class="grid" id="grid"></div>
+    <div class="scroller" id="scroller">
+      <div class="cal-top">
+        <div class="cal-head" id="cal-head"></div>
+        <div class="allday" id="allday"></div>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
     <div class="strip" id="strip"></div>
   </section>
 </div>
@@ -246,8 +260,11 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   // EMBED: the same page published as a Claude artifact (desktop/phone browser).
   // No weather there (the artifact can't reach the forecast service) and no Setup.
   const EMBED = !!window.WALL_EMBED;
-  const daysFor = () => (EMBED && window.innerWidth < 760 ? 3 : 7);
-  let NDAYS = daysFor();
+  // Always seven days; VIS of them fit the screen and the rest scroll in.
+  // The wall shows three (bigger blocks); a desktop browser shows the week.
+  const NDAYS = 7, HOUR_PX = 58;   // wall: height of one hour
+  const visFor = () => (EMBED && window.innerWidth >= 760 ? 7 : 3);
+  let VIS = visFor();
   const DATA_EVERY = 5 * 60e3, WX_EVERY = 20 * 60e3, RELOAD_EVERY = 6 * 3600e3, POP_CLOSE = 90e3;
   const DEMO = new URLSearchParams(location.search).has("demo");
 
@@ -455,7 +472,11 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
 
   function renderCal() {
     const today = new Date(), keys = Array.from({ length: NDAYS }, (_, n) => iso(addDays(today, n)));
-    const cal = $("cal"); cal.style.setProperty("--days", NDAYS); cal.classList.toggle("wk", NDAYS > 3);
+    const cal = $("cal"); cal.style.setProperty("--days", NDAYS); cal.classList.toggle("wk", VIS > 3);
+    const sc = $("scroller"), keep = sc.scrollLeft, keepTop = sc.scrollTop;
+    const colw = (sc.clientWidth - 3.6 * parseFloat(getComputedStyle(sc).fontSize)) / VIS;
+    cal.style.setProperty("--colw", `${Math.max(colw, 60)}px`);
+    const first = Math.round(keep / Math.max(colw, 1));
     const models = keys.map(dayModel);
     let from = (parseInt(cfg.from, 10) || 8) * 60, to = (parseInt(cfg.to, 10) || 22) * 60;
     models.forEach((m) => m.timed.filter((e) => e.kind !== "quiet").forEach((e) => { from = Math.min(from, Math.floor(e.start / 60) * 60); to = Math.max(to, Math.ceil(e.end / 60) * 60); }));
@@ -466,7 +487,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     keys.forEach((k, i) => {
       const d = addDays(today, i), h = el("div", "dh" + (i === 0 ? " is-today" : "")), left = el("div", "left");
       left.append(el("div", "num", String(d.getDate())),
-        el("div", "wd", i === 0 ? "Today" : NDAYS > 3 ? d.toLocaleDateString(undefined, { weekday: "short" })
+        el("div", "wd", i === 0 ? "Today" : VIS > 3 ? d.toLocaleDateString(undefined, { weekday: "short" })
           : i === 1 ? "Tomorrow" : d.toLocaleDateString(undefined, { weekday: "long" })));
       h.append(left);
       const w = dayWeather(k);
@@ -489,6 +510,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     });
 
     const grid = $("grid"); grid.textContent = "";
+    grid.style.height = EMBED ? "" : `${((to - from) / 60) * HOUR_PX}px`;
     const span = to - from, pct = (m) => `${((m - from) / span) * 100}%`;
     const gutter = el("div", "gutter");
     for (let m = from + 60; m < to; m += 60) { const h = el("div", "hour", fmtClock(m)); h.style.top = pct(m); gutter.append(h); }
@@ -513,10 +535,15 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
         col.append(box);
       });
       if (i === 0 && nowMin >= from && nowMin <= to) { const l = el("div", "now-line"); l.style.top = pct(nowMin); col.append(l); }
-      if (openPop && openPop.key === keys[i]) col.append(popover(openPop, pct, i >= NDAYS / 2));
+      if (openPop && openPop.key === keys[i]) col.append(popover(openPop, pct, i - first >= VIS / 2));
       grid.append(col);
     });
+    sc.scrollLeft = keep;   // the minute redraw keeps the scroll position
+    sc.scrollTop = keepTop;
+    nowTop = EMBED ? 0 : Math.max(0, ((nowMin - from) / 60 - 1) * HOUR_PX);
+    if (!placed && !EMBED) { sc.scrollTop = nowTop; placed = true; }
   }
+  let nowTop = 0, placed = false;   // wall: scroll to an hour before now
 
   function bolusButton(b, cls) {
     const btn = el("button", cls);
@@ -642,11 +669,16 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   }
 
   /* ---------- start ---------- */
+  if (!EMBED) document.body.classList.add("wall");
   render();
-  if (EMBED) {
-    $("now").hidden = true;
-    window.addEventListener("resize", () => { const n = daysFor(); if (n !== NDAYS) { NDAYS = n; renderCal(); } });
-  }
+  if (EMBED) $("now").hidden = true;
+  window.addEventListener("resize", () => { VIS = visFor(); renderCal(); });
+  // On the wall, drift back to today two minutes after a swipe.
+  let back = null;
+  if (!EMBED) $("scroller").addEventListener("scroll", () => {
+    clearTimeout(back);
+    back = setTimeout(() => $("scroller").scrollTo({ left: 0, top: nowTop, behavior: "smooth" }), 120e3);
+  }, { passive: true });
   if (!EMBED && !DEMO && !cfg.token && location.protocol !== "file:") {
     fetch("schedule.json", { method: "HEAD" }).then((r) => { if (!r.ok) openSetup(); }).catch(openSetup);
   }
