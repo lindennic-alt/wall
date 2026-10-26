@@ -673,6 +673,8 @@ body {
   /* ---------- Spotify search ---------- */
   // Spotify's Web API with the Authorization Code + PKCE flow: only the (public) Client ID is stored,
   // never a secret. Tokens stay on this iPad. Results play in the Spotify player like presets.
+  // user-read-private lets search use the account's country; tokens from before it was asked for are dropped.
+  const SP_SCOPE = "user-read-private";
   const SP_CLIENT = "music-hub:sp-client", SP_TOKEN = "music-hub:sp-token", SP_VERIFIER = "music-hub:sp-verifier", SP_TYPE = "music-hub:sp-type";
   const REDIRECT = location.origin + location.pathname;
   const S_TYPES = [["all", "All"], ["track", "Songs"], ["artist", "Artists"], ["album", "Albums"], ["playlist", "Playlists"], ["show", "Podcasts"]];
@@ -688,7 +690,7 @@ body {
     const verifier = randomString(64);
     save(SP_VERIFIER, verifier);
     const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
-    const q = new URLSearchParams({ client_id: id, response_type: "code", redirect_uri: REDIRECT, code_challenge_method: "S256", code_challenge: challenge });
+    const q = new URLSearchParams({ client_id: id, response_type: "code", redirect_uri: REDIRECT, scope: SP_SCOPE, code_challenge_method: "S256", code_challenge: challenge });
     location.href = `https://accounts.spotify.com/authorize?${q}`;
   }
   async function tokenRequest(body) {
@@ -698,7 +700,7 @@ body {
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j.error_description || j.error || `HTTP ${res.status}`);
     const old = load(SP_TOKEN, {}) || {};
-    const tok = { access: j.access_token, refresh: j.refresh_token || old.refresh, expires: Date.now() + (j.expires_in - 60) * 1000 };
+    const tok = { access: j.access_token, refresh: j.refresh_token || old.refresh, expires: Date.now() + (j.expires_in - 60) * 1000, scope: j.scope ?? old.scope ?? SP_SCOPE };
     save(SP_TOKEN, tok);
     return tok;
   }
@@ -716,6 +718,7 @@ body {
   async function accessToken() {
     const tok = load(SP_TOKEN, null);
     if (!tok || !tok.refresh) return null;
+    if (!(tok.scope || "").includes(SP_SCOPE)) { save(SP_TOKEN, null); return null; }
     if (tok.access && Date.now() < tok.expires) return tok.access;
     try { return (await tokenRequest({ grant_type: "refresh_token", refresh_token: tok.refresh, client_id: load(SP_CLIENT, "") })).access; }
     catch { save(SP_TOKEN, null); return null; }
@@ -735,6 +738,7 @@ body {
     if (res.status === 429) throw new Error("Spotify says too many searches. Wait a minute and try again.");
     if (!res.ok) {
       const why = await res.json().then((j) => (j.error && j.error.message) || "", () => "");
+      if (res.status === 403 && /scope/i.test(why)) { save(SP_TOKEN, null); renderSearchSheet(); throw new Error("Spotify needs one more permission. Tap Connect Spotify to sign in again."); }
       if (res.status === 403) throw new Error(`Spotify refused the search${why ? ` (“${why}”)` : ""}. Spotify’s developer apps now need the app owner to have Spotify Premium, and your account must be listed under the app’s User Management. After fixing either, tap Disconnect Spotify and connect again.`);
       throw new Error(`Spotify search failed (HTTP ${res.status}${why ? `: ${why}` : ""}).`);
     }
@@ -743,7 +747,7 @@ body {
 
   function sErr(msg) { const e = $("s-err"); e.textContent = msg || ""; e.hidden = !msg; }
   function renderSearchSheet() {
-    const connected = !!(load(SP_TOKEN, null) || {}).refresh;
+    const t0 = load(SP_TOKEN, null) || {}, connected = !!t0.refresh && (t0.scope || "").includes(SP_SCOPE);
     $("s-setup").hidden = connected;
     ["s-row", "s-types", "s-results", "s-actions"].forEach((id) => { $(id).hidden = !connected; });
     $("s-redirect").textContent = REDIRECT;
