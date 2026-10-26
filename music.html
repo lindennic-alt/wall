@@ -577,17 +577,18 @@ body {
   const ytState = () => { try { return yt.getPlayerState(); } catch { return -1; } };
   let ytLoaded = null, ytSwitched = () => true;   // the list or video id the player last confirmed loading
   function ytLoad(t) {
-    if (t.list) yt.loadPlaylist({ list: t.list, listType: "playlist", index: 0 });
+    if (t.ids) yt.loadPlaylist(t.ids, 0);   // our own list of playable videos (see ytResolve)
+    else if (t.list) yt.loadPlaylist({ list: t.list, listType: "playlist", index: 0 });
     else yt.loadVideoById(t.video);
   }
   function startYouTube(p) {
     const t = p.target, want = t.list || t.video, seq = ++ytSeq, before = ytList(), beforeVideo = ytVideo();
     const current = () => seq === ytSeq && playing && playing.id === p.id;   // false once another preset is tapped
     // A long playlist can take a while to report its contents, so a new video starting also counts as switched.
-    const switched = () => (t.list
+    const switched = () => (t.ids ? t.ids.includes(ytVideo()) : t.list
       ? (ytList() !== "[]" && (ytList() !== before || ytLoaded === want)) || (ytVideo() !== "" && ytVideo() !== beforeVideo)
       : ytVideo() === t.video);
-    ytShufflePending = shuffle && !!t.list;
+    ytShufflePending = shuffle && !!t.list && !t.ids;   // a resolved list is shuffled before loading
     ytSwitched = switched;
     try { yt.stopVideo(); } catch {}
     ytLoad(t);
@@ -634,7 +635,10 @@ body {
     $("np-title").textContent = p.name;
     $("np-sub").textContent = SOURCES[p.source]?.label || "";
     const open = $("np-open"); open.href = p.url; open.hidden = false;
-    if (target.kind === "youtube") {
+    if (target.kind === "youtube" && target.list && load(YT_KEY, "")) {
+      show("youtube");
+      startResolvedPlaylist(playing);
+    } else if (target.kind === "youtube") {
       show("youtube");
       if (ytReady) startYouTube(playing); else if (ytApi && yt === null) { makeYouTube(playing.target); } else { ytPending = playing; $("np-sub").textContent = "Loading the YouTube player…"; }
     } else if (target.kind === "app") {
@@ -758,6 +762,69 @@ body {
     persist(); render();
     $("b-err").hidden = true; $("b-ok").textContent = `Restored ${presets.length} presets.`; $("b-ok").hidden = false;
   });
+
+  /* ---------- playlists via the YouTube Data API ---------- */
+  // Some videos (often official music videos) refuse to play outside youtube.com, and a playlist that
+  // starts with them may not load in the embedded player at all. With an API key, the hub reads the
+  // playlist itself, keeps only videos that can play here, and hands the player that list of videos.
+  const ytResolved = {};
+  async function ytApiGet(path, params) {
+    const res = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${new URLSearchParams({ ...params, key: load(YT_KEY, "") })}`);
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const reason = ((j.error && j.error.errors && j.error.errors[0]) || {}).reason || "";
+      throw Object.assign(new Error((j.error && j.error.message) || `HTTP ${res.status}`), { reason, status: res.status });
+    }
+    return j;
+  }
+  async function ytResolve(list) {
+    const hit = ytResolved[list];
+    if (hit && Date.now() - hit.at < 3 * 3600e3) return hit;
+    const ids = [];
+    let pageToken = "", total = 0;
+    do {
+      const j = await ytApiGet("playlistItems", { part: "contentDetails", playlistId: list, maxResults: "50", ...(pageToken ? { pageToken } : {}) });
+      total = (j.pageInfo && j.pageInfo.totalResults) || total;
+      (j.items || []).forEach((it) => { if (it.contentDetails && it.contentDetails.videoId) ids.push(it.contentDetails.videoId); });
+      pageToken = j.nextPageToken || "";
+    } while (pageToken && ids.length < 200);
+    const ok = [];
+    for (let i = 0; i < ids.length; i += 50) {
+      const j = await ytApiGet("videos", { part: "status", id: ids.slice(i, i + 50).join(",") });
+      const good = new Set((j.items || []).filter((v) => v.status && v.status.embeddable && v.status.privacyStatus !== "private" && v.status.uploadStatus === "processed").map((v) => v.id));
+      ids.slice(i, i + 50).forEach((id) => { if (good.has(id)) ok.push(id); });
+    }
+    const out = { ids: ok, total: total || ids.length, checked: ids.length, at: Date.now() };
+    ytResolved[list] = out;
+    return out;
+  }
+  async function startResolvedPlaylist(p) {
+    $("np-sub").textContent = "Checking the playlist…";
+    let r;
+    try { r = await ytResolve(p.target.list); }
+    catch (e) {
+      if (playing !== p) return;
+      if (e.reason === "playlistNotFound" || e.status === 404) {
+        $("np-sub").textContent = "Playlist not found";
+        note("YouTube says this playlist doesn’t exist or is private. Check its visibility is Public or Unlisted, and that the link is the playlist’s own Share link.");
+        return;
+      }
+      // API trouble (quota, key): fall back to letting the player load the list itself
+      if (ytReady) startYouTube(p); else ytPending = p;
+      return;
+    }
+    if (playing !== p) return;
+    if (!r.ids.length) {
+      $("np-sub").textContent = "Nothing in this playlist can play here";
+      note(`YouTube blocks every video in this playlist (${r.checked} checked) from playing outside youtube.com. Use Open in app for this one.`);
+      return;
+    }
+    const ids = shuffle ? shuffled(r.ids.slice()) : r.ids.slice(0, 200);
+    playing.target = { ...p.target, ids };
+    const skipped = r.checked - r.ids.length;
+    if (ytReady) startYouTube(playing); else ytPending = playing;
+    if (skipped) setTimeout(() => { if (playing === p) note(`Skipping ${skipped} of ${r.checked} videos that YouTube only allows on youtube.com.`); }, 1500);
+  }
 
   /* ---------- YouTube search (YouTube tab) ---------- */
   // YouTube Data API v3 with a key kept only on this iPad. Each search costs 100 of the key's
