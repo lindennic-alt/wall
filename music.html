@@ -104,6 +104,16 @@ body {
 .screen { position: relative; flex: 1 1 auto; min-height: 180px; border-radius: 10px; overflow: hidden; background: #000; }
 @media (max-aspect-ratio: 1/1) { .screen { flex: none; aspect-ratio: 16 / 9; max-height: 34vh; min-height: 0; width: 100%; } }
 .screen > div, .screen iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.spc { display: flex; align-items: center; gap: 20px; padding: 18px; background: #0b0a09; }
+.spc img { width: min(42%, 260px); aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--raise); flex: none; }
+.spc .info { min-width: 0; flex: 1; display: grid; gap: 8px; }
+.spc .ti { font-weight: 800; font-size: 1.35em; line-height: 1.15; overflow-wrap: anywhere; }
+.spc .ar { color: var(--muted); }
+.spc .prog { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.spc .prog i { display: block; height: 100%; width: 0; background: var(--spotify); }
+.spc .times { display: flex; justify-content: space-between; font: 500 .75em var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.spc label { font-size: .75em; color: var(--muted); display: grid; gap: 4px; }
+.spc select { font: 500 .9rem var(--font-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .45em .6em; max-width: 100%; }
 .idle { display: grid; place-items: center; text-align: center; color: var(--muted); padding: 20px; font-size: .95em; }
 .idle b { display: block; color: var(--ink); font-size: 1.2em; margin-bottom: 4px; }
 .np { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -228,6 +238,17 @@ body {
       <div class="idle" id="idle"><div><b>Nothing playing</b>Tap a preset and it plays here.</div></div>
       <div id="yt-host" hidden><div id="yt"></div></div>
       <div id="sp-host" hidden><div id="sp"></div></div>
+      <div id="spc" class="spc" hidden>
+        <img id="spc-art" alt="">
+        <div class="info">
+          <div class="ti" id="spc-title">Starting Spotify…</div>
+          <div class="ar" id="spc-artist"></div>
+          <div class="prog"><i id="spc-bar"></i></div>
+          <div class="times"><span id="spc-pos">0:00</span><span id="spc-dur">0:00</span></div>
+          <label for="spc-device">Playing on
+            <select id="spc-device"><option value="">Looking for devices…</option></select></label>
+        </div>
+      </div>
       <iframe id="pod" title="Podcast player" hidden allow="autoplay *; encrypted-media *; clipboard-write" sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation"></iframe>
     </div>
     <div class="np">
@@ -539,14 +560,16 @@ body {
     $("idle").hidden = which !== "idle";
     $("yt-host").hidden = which !== "youtube";
     $("sp-host").hidden = which !== "spotify" && which !== "liked";
+    $("spc").hidden = which !== "app";
     $("pod").hidden = which !== "apple";
-    $("yt-controls").hidden = which !== "youtube" && which !== "liked";
+    $("yt-controls").hidden = which !== "youtube" && which !== "liked" && which !== "app";
     $("c-reset").hidden = which !== "youtube";
   }
   function stopOthers(kind) {
     if (kind !== "youtube" && ytReady) { try { yt.pauseVideo(); } catch {} }
     if (kind !== "spotify" && kind !== "liked" && spReady) { try { sp.pause(); } catch {} }
     if (kind !== "apple" && $("pod").getAttribute("src")) $("pod").removeAttribute("src");
+    if (kind !== "app" && app.active) { app.active = false; appCall("PUT", "/me/player/pause").catch(() => {}); }
   }
   const ytList = () => { try { return JSON.stringify(yt.getPlaylist() || []); } catch { return "[]"; } };
   const ytVideo = () => { try { return (yt.getVideoData() || {}).video_id || ""; } catch { return ""; } };
@@ -597,7 +620,9 @@ body {
   }
 
   function play(p) {
-    const target = playable(p.url);
+    let target = playable(p.url);
+    // With Spotify connected, Spotify items play in the Spotify app (full tracks) and the hub is the remote.
+    if ((target.kind === "spotify" || target.kind === "liked") && spConnected()) target = { ...target, kind: "app", liked: target.kind === "liked" };
     playing = { ...p, kind: target.kind, target };
     stopOthers(target.kind);
     note("");
@@ -607,9 +632,12 @@ body {
     if (target.kind === "youtube") {
       show("youtube");
       if (ytReady) startYouTube(playing); else if (ytApi && yt === null) { makeYouTube(playing.target); } else { ytPending = playing; $("np-sub").textContent = "Loading the YouTube player…"; }
+    } else if (target.kind === "app") {
+      show("app");
+      appPlay(playing);
     } else if (target.kind === "spotify") {
       show("spotify");
-      note("If Spotify only plays 30-second previews, log in at open.spotify.com in Safari on this iPad, or use Open in app.");
+      note("Connect Spotify (Search Spotify › Connect) to play full songs through the Spotify app.");
       if (spApi) startSpotify(playing); else { spPending = playing; $("np-sub").textContent = "Loading the Spotify player…"; }
     } else if (target.kind === "liked") {
       show("liked");
@@ -627,9 +655,11 @@ body {
   }
 
   const likedOn = () => playing && playing.kind === "liked";
-  $("c-prev").addEventListener("click", () => { if (likedOn()) likedStep(-1); else if (ytReady) yt.previousVideo(); });
-  $("c-next").addEventListener("click", () => { if (likedOn()) likedStep(1); else if (ytReady) yt.nextVideo(); });
+  const appOn = () => playing && playing.kind === "app";
+  $("c-prev").addEventListener("click", () => { if (appOn()) appControl("POST", "/me/player/previous"); else if (likedOn()) likedStep(-1); else if (ytReady) yt.previousVideo(); });
+  $("c-next").addEventListener("click", () => { if (appOn()) appControl("POST", "/me/player/next"); else if (likedOn()) likedStep(1); else if (ytReady) yt.nextVideo(); });
   $("c-play").addEventListener("click", () => {
+    if (appOn()) { appControl("PUT", app.playing ? "/me/player/pause" : "/me/player/play"); return; }
     if (likedOn()) { if (sp) sp.togglePlay(); return; }
     if (!ytReady) return;
     yt.getPlayerState() === YT.PlayerState.PLAYING ? yt.pauseVideo() : yt.playVideo();
@@ -644,6 +674,7 @@ body {
     shuffle = !shuffle; save(SHUFFLE_KEY, shuffle); renderShuffle();
     if (ytReady) { try { yt.setShuffle(shuffle); } catch {} }
     likedReorder();
+    if (appOn()) appControl("PUT", `/me/player/shuffle?state=${shuffle}`);
   });
 
   /* ---------- editor ---------- */
@@ -926,12 +957,140 @@ body {
     }
   }
 
+  /* ---------- Spotify app remote ---------- */
+  // Plays through Spotify Connect: the Spotify app (on this iPad or another device) does the playing,
+  // so songs are full length with Premium, and the hub shows what's on and sends the controls.
+  const SP_DEVICE = "music-hub:sp-device";
+  const app = { active: false, playing: false, poll: null, me: null, devices: [] };
+  const spConnected = () => { const t = load(SP_TOKEN, null); return !!(t && t.refresh && hasScopes(t)); };
+  async function appCall(method, path, body) {
+    let token = await accessToken();
+    if (!token) throw Object.assign(new Error("Spotify isn’t connected. Tap Search Spotify, then Connect Spotify."), { code: "signed-out" });
+    const go = (tk) => fetch(`https://api.spotify.com/v1${path}`, {
+      method, headers: { Authorization: `Bearer ${tk}`, ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined,
+    });
+    let res = await go(token);
+    if (res.status === 401) {
+      const tok = load(SP_TOKEN, {}) || {}; tok.expires = 0; save(SP_TOKEN, tok);
+      token = await accessToken();
+      if (!token) throw Object.assign(new Error("Spotify signed out. Tap Search Spotify, then Connect Spotify."), { code: "signed-out" });
+      res = await go(token);
+    }
+    if (res.status === 204 || res.status === 202) return null;
+    const j = await res.json().catch(() => null);
+    if (!res.ok) {
+      const e = new Error((j && j.error && j.error.message) || `HTTP ${res.status}`);
+      e.status = res.status; e.reason = j && j.error && j.error.reason; throw e;
+    }
+    return j;
+  }
+  const mmss = (ms) => { const t = Math.max(0, Math.round((ms || 0) / 1000)); return `${Math.floor(t / 60)}:${pad(t % 60)}`; };
+
+  async function appDevices() {
+    const j = await appCall("GET", "/me/player/devices");
+    app.devices = (j && j.devices) || [];
+    const sel = $("spc-device"), want = load(SP_DEVICE, "");
+    sel.textContent = "";
+    if (!app.devices.length) sel.append(Object.assign(el("option", null, "No Spotify app open"), { value: "" }));
+    app.devices.forEach((d) => {
+      const o = el("option", null, `${d.name}${d.is_active ? " (playing)" : ""}`); o.value = d.id;
+      if (d.id === want || (!app.devices.some((x) => x.id === want) && d.is_active)) o.selected = true;
+      sel.append(o);
+    });
+    return app.devices;
+  }
+  // The remembered device, else whatever is active, else a tablet (this iPad), else the first one.
+  function pickDevice() {
+    const want = load(SP_DEVICE, ""), d = app.devices;
+    return (d.find((x) => x.id === want) || d.find((x) => x.is_active) || d.find((x) => /tablet/i.test(x.type)) || d[0] || {}).id || "";
+  }
+  function noDevice() {
+    $("spc-title").textContent = "Open the Spotify app on this iPad";
+    $("spc-artist").textContent = "The hub plays through the Spotify app. Open it once (Open in app), come back to the hub, and tap the preset again. Once music is playing, Spotify keeps running in the background.";
+    $("spc-art").removeAttribute("src");
+  }
+
+  async function appPlay(p) {
+    const t = p.target;
+    app.active = true;
+    $("spc-title").textContent = "Starting Spotify…"; $("spc-artist").textContent = "";
+    $("spc-bar").style.width = "0"; $("spc-pos").textContent = "0:00"; $("spc-dur").textContent = "0:00";
+    try {
+      await appDevices();
+      const device = pickDevice();
+      if (!device) { noDevice(); return; }
+      if (playing !== p) return;
+      const q = `?device_id=${encodeURIComponent(device)}`;
+      await appCall("PUT", `/me/player/shuffle?state=${shuffle}&device_id=${encodeURIComponent(device)}`).catch(() => {});
+      let body;
+      if (t.liked) {
+        if (!app.me) app.me = await appCall("GET", "/me");
+        body = { context_uri: `spotify:user:${app.me.id}:collection` };
+      } else body = /^spotify:(track|episode):/.test(t.uri) ? { uris: [t.uri] } : { context_uri: t.uri };
+      try { await appCall("PUT", `/me/player/play${q}`, body); }
+      catch (e) {
+        if (!t.liked || e.status === 404 || e.status === 403) throw e;
+        // Liked Songs as a context isn't accepted everywhere: send the songs themselves instead.
+        await loadLiked();
+        const uris = liked.order.slice(0, 100).map((i) => liked.tracks[i].uri);
+        await appCall("PUT", `/me/player/play${q}`, { uris });
+      }
+      save(SP_DEVICE, device);
+      note("");
+      appStartPolling();
+    } catch (e) {
+      if (playing !== p) return;
+      if (e.status === 404) { noDevice(); return; }
+      if (e.status === 403 && /premium/i.test(e.message + (e.reason || ""))) { $("spc-title").textContent = "Spotify Premium is needed to control playback"; $("spc-artist").textContent = "Use Open in app instead."; return; }
+      $("spc-title").textContent = "Couldn’t start Spotify";
+      $("spc-artist").textContent = e.code === "signed-out" ? e.message : `Spotify said: ${e.message}. Use Open in app, or tap the preset again.`;
+    }
+  }
+  function appStartPolling() {
+    clearInterval(app.poll);
+    appRefresh();
+    app.poll = setInterval(() => { if (appOn() && document.visibilityState === "visible") appRefresh(); }, 3000);
+  }
+  async function appRefresh() {
+    let st;
+    try { st = await appCall("GET", "/me/player?additional_types=episode"); } catch { return; }
+    if (!appOn()) return;
+    if (!st || !st.item) { app.playing = false; return; }
+    const it = st.item, isEp = it.type === "episode";
+    app.playing = !!st.is_playing;
+    $("spc-title").textContent = it.name;
+    $("spc-artist").textContent = isEp ? ((it.show && it.show.name) || "") : (it.artists || []).map((a) => a.name).join(", ");
+    const imgs = (isEp ? it.images : it.album && it.album.images) || [];
+    const art = (imgs[0] || {}).url;
+    if (art && $("spc-art").getAttribute("src") !== art) $("spc-art").src = art;
+    $("spc-bar").style.width = `${Math.min(100, (st.progress_ms / (it.duration_ms || 1)) * 100)}%`;
+    $("spc-pos").textContent = mmss(st.progress_ms); $("spc-dur").textContent = mmss(it.duration_ms);
+    $("np-sub").textContent = `${it.name} — ${$("spc-artist").textContent}${st.is_playing ? "" : " (paused)"}`;
+    if (st.device && st.device.id && st.device.id !== $("spc-device").value) appDevices().catch(() => {});
+  }
+  async function appControl(method, path) {
+    const dev = load(SP_DEVICE, "");
+    const sep = path.includes("?") ? "&" : "?";
+    try { await appCall(method, dev ? `${path}${sep}device_id=${encodeURIComponent(dev)}` : path); }
+    catch (e) { if (e.status === 404) noDevice(); else note(`Spotify said: ${e.message}`); }
+    setTimeout(appRefresh, 600);
+  }
+  $("spc-device").addEventListener("focus", () => { appDevices().catch(() => {}); });
+  $("spc-device").addEventListener("change", async () => {
+    const id = $("spc-device").value;
+    if (!id) return;
+    save(SP_DEVICE, id);
+    try { await appCall("PUT", "/me/player", { device_ids: [id], play: true }); setTimeout(appRefresh, 800); }
+    catch (e) { note(`Couldn’t move playback: ${e.message}`); }
+  });
+
   /* ---------- Spotify search ---------- */
   // Spotify's Web API with the Authorization Code + PKCE flow: only the (public) Client ID is stored,
   // never a secret. Tokens stay on this iPad. Results play in the Spotify player like presets.
-  // user-read-private lets search use the account's country; user-library-read reads Liked Songs.
+  // user-read-private lets search use the account's country; user-library-read reads Liked Songs;
+  // the two playback scopes let the hub start and control playback in the Spotify app.
   // Tokens issued without every scope here are dropped, which sends the viewer back to Connect.
-  const SP_SCOPE = "user-read-private user-library-read";
+  const SP_SCOPE = "user-read-private user-library-read user-read-playback-state user-modify-playback-state";
   const hasScopes = (tok) => SP_SCOPE.split(" ").every((sc) => ((tok && tok.scope) || "").split(" ").includes(sc));
   const SP_CLIENT = "music-hub:sp-client", SP_TOKEN = "music-hub:sp-token", SP_VERIFIER = "music-hub:sp-verifier", SP_TYPE = "music-hub:sp-type";
   const REDIRECT = location.origin + location.pathname;
