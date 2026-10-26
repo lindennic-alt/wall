@@ -123,6 +123,7 @@ body {
 .controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .controls .btn { flex: 1 1 auto; min-height: 48px; font-size: 1em; }
 .note { color: var(--muted); font-size: .8em; margin: 0; }
+.diag { margin: 0; max-height: 9em; overflow: auto; font: 400 .7em/1.4 var(--font-mono); color: var(--muted); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
 
 /* ---------- sheets ---------- */
 .sheet { position: fixed; inset: 0; z-index: 20; background: #000a; display: grid; place-items: center; overflow: auto;
@@ -267,6 +268,8 @@ body {
       <button class="btn" type="button" id="c-reset">Reset</button>
     </div>
     <p class="note" id="np-note" hidden></p>
+    <p class="note"><button class="linkbtn" type="button" id="diag-toggle">Show player details</button></p>
+    <pre class="diag" id="diag" hidden></pre>
   </section>
 </div>
 
@@ -530,6 +533,7 @@ body {
           if (ytPending) { const p = ytPending; ytPending = null; startYouTube(p); }
         },
         onStateChange: (e) => {
+          diag(`youtube state ${({ "-1": "unstarted", 0: "ended", 1: "playing", 2: "paused", 3: "buffering", 5: "cued" })[e.data] || e.data} video=${ytVideo()}`);
           if (e.data === YT.PlayerState.PLAYING) {
             const d = yt.getVideoData && yt.getVideoData();
             if (d && d.title) $("np-sub").textContent = d.title;
@@ -541,6 +545,7 @@ body {
         },
         // 101/150: the uploader blocked embedding; 100: removed. Skip to the next video in the list.
         onError: (e) => {
+          diag(`youtube error ${e.data} on “${((yt.getVideoData && yt.getVideoData()) || {}).title || "?"}” (${ytVideo()}) at position ${(yt.getPlaylistIndex ? yt.getPlaylistIndex() : -1) + 1}`);
           if (playing && playing.target.list && [100, 101, 150].includes(e.data)) { note("Skipped a video that can’t play outside YouTube."); yt.nextVideo(); }
           else note("This video can’t play here. Use Open in app.");
         },
@@ -556,7 +561,20 @@ body {
   loadScript("https://open.spotify.com/embed/iframe-api/v1");
   setTimeout(() => { if (!ytApi && playing && playing.kind === "youtube") note("YouTube’s player script didn’t load. Tap Reset to try again."); }, 10000);
 
-  function note(msg) { $("np-note").textContent = msg; $("np-note").hidden = !msg; }
+  function note(msg) { $("np-note").textContent = msg; $("np-note").hidden = !msg; if (msg) diag(`note: ${msg}`); }
+  // A short log of what the players did, shown under the player on request, for troubleshooting.
+  const diagLines = [];
+  function diag(msg) {
+    const d = new Date();
+    diagLines.push(`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${msg}`);
+    if (diagLines.length > 40) diagLines.shift();
+    if (!$("diag").hidden) { $("diag").textContent = diagLines.join("\n"); $("diag").scrollTop = 1e6; }
+  }
+  $("diag-toggle").addEventListener("click", () => {
+    const d = $("diag"); d.hidden = !d.hidden;
+    $("diag-toggle").textContent = d.hidden ? "Show player details" : "Hide player details";
+    if (!d.hidden) { d.textContent = diagLines.join("\n") || "Nothing yet. Tap a preset."; d.scrollTop = 1e6; }
+  });
   function show(which) {
     $("idle").hidden = which !== "idle";
     $("yt-host").hidden = which !== "youtube";
@@ -582,6 +600,7 @@ body {
     else yt.loadVideoById(t.video);
   }
   function startYouTube(p) {
+    diag(`youtube load ${p.target.ids ? `${p.target.ids.length} checked videos` : p.target.list ? `list ${p.target.list}` : `video ${p.target.video}`}`);
     const t = p.target, want = t.list || t.video, seq = ++ytSeq, before = ytList(), beforeVideo = ytVideo();
     const current = () => seq === ytSeq && playing && playing.id === p.id;   // false once another preset is tapped
     // A long playlist can take a while to report its contents, so a new video starting also counts as switched.
@@ -594,10 +613,11 @@ body {
     ytLoad(t);
     setTimeout(() => {
       if (!current()) return;
-      if (!switched()) { try { yt.stopVideo(); } catch {} ytLoad(t); }   // retry once
+      if (!switched()) { diag("youtube did not switch after 6s, retrying"); try { yt.stopVideo(); } catch {} ytLoad(t); }   // retry once
       setTimeout(() => {
         if (!current()) return;
         if (!switched()) {
+          diag(`youtube still not switched: playlist=${ytList().slice(0, 80)} video=${ytVideo()}`);
           try { yt.stopVideo(); } catch {}
           $("np-sub").textContent = "Couldn’t load this playlist";
           note("YouTube won’t load this playlist in the hub. Private playlists only play on YouTube itself: set it to Unlisted, or use Open in app.");
@@ -622,7 +642,9 @@ body {
   }
 
   function play(p) {
+    diag(`tap “${p.name}” ${p.url}`);
     let target = playable(p.url);
+    diag(`link read as ${JSON.stringify(target)}`);
     // With Spotify connected, Spotify items play in the Spotify app (full tracks) and the hub is the remote.
     const isSpotify = target.kind === "spotify" || target.kind === "liked";
     if (isSpotify && spConnected() && load(SP_MODE, "app") === "app") target = { ...target, kind: "app", liked: target.kind === "liked" };
@@ -640,6 +662,7 @@ body {
       startResolvedPlaylist(playing);
     } else if (target.kind === "youtube") {
       show("youtube");
+      diag(`no YouTube API key set${target.list ? ", so the player loads the list itself" : ""}`);
       if (ytReady) startYouTube(playing); else if (ytApi && yt === null) { makeYouTube(playing.target); } else { ytPending = playing; $("np-sub").textContent = "Loading the YouTube player…"; }
     } else if (target.kind === "app") {
       show("app");
@@ -788,21 +811,36 @@ body {
       (j.items || []).forEach((it) => { if (it.contentDetails && it.contentDetails.videoId) ids.push(it.contentDetails.videoId); });
       pageToken = j.nextPageToken || "";
     } while (pageToken && ids.length < 200);
-    const ok = [];
+    const ok = [], blocked = [];
     for (let i = 0; i < ids.length; i += 50) {
-      const j = await ytApiGet("videos", { part: "status", id: ids.slice(i, i + 50).join(",") });
-      const good = new Set((j.items || []).filter((v) => v.status && v.status.embeddable && v.status.privacyStatus !== "private" && v.status.uploadStatus === "processed").map((v) => v.id));
-      ids.slice(i, i + 50).forEach((id) => { if (good.has(id)) ok.push(id); });
+      const chunk = ids.slice(i, i + 50);
+      const j = await ytApiGet("videos", { part: "status,snippet", id: chunk.join(",") });
+      const byId = new Map((j.items || []).map((v) => [v.id, v]));
+      chunk.forEach((id, k) => {
+        const v = byId.get(id), n = i + k + 1;
+        const why = !v ? "deleted or private"
+          : !v.status.embeddable ? "owner blocks playing outside YouTube"
+          : v.status.privacyStatus === "private" ? "private"
+          : v.status.uploadStatus !== "processed" ? `upload ${v.status.uploadStatus}` : "";
+        if (why) blocked.push({ n, id, title: v ? v.snippet.title : "(unavailable video)", why });
+        else ok.push(id);
+      });
     }
-    const out = { ids: ok, total: total || ids.length, checked: ids.length, at: Date.now() };
+    const out = { ids: ok, blocked, total: total || ids.length, checked: ids.length, at: Date.now() };
     ytResolved[list] = out;
     return out;
   }
   async function startResolvedPlaylist(p) {
     $("np-sub").textContent = "Checking the playlist…";
     let r;
-    try { r = await ytResolve(p.target.list); }
+    diag(`checking playlist ${p.target.list} with the API`);
+    try {
+      r = await ytResolve(p.target.list);
+      diag(`api: ${r.checked} videos read, ${r.ids.length} can play here (playlist says ${r.total})`);
+      r.blocked.forEach((b) => diag(`  #${b.n} “${b.title}” (${b.id}): ${b.why}`));
+    }
     catch (e) {
+      diag(`api error ${e.status || ""} ${e.reason || ""} ${e.message}`);
       if (playing !== p) return;
       if (e.reason === "playlistNotFound" || e.status === 404) {
         $("np-sub").textContent = "Playlist not found";
@@ -823,7 +861,7 @@ body {
     playing.target = { ...p.target, ids };
     const skipped = r.checked - r.ids.length;
     if (ytReady) startYouTube(playing); else ytPending = playing;
-    if (skipped) setTimeout(() => { if (playing === p) note(`Skipping ${skipped} of ${r.checked} videos that YouTube only allows on youtube.com.`); }, 1500);
+    if (skipped) setTimeout(() => { if (playing === p) note(`Skipping ${skipped} of ${r.checked} videos that can’t play here. Tap Show player details to see which.`); }, 1500);
   }
 
   /* ---------- YouTube search (YouTube tab) ---------- */
