@@ -372,6 +372,7 @@ body {
       const video = host === "youtu.be" ? u.pathname.slice(1) : u.searchParams.get("v");
       if (list || video) return { kind: "youtube", list, video };
     }
+    if (host === "open.spotify.com" && u.pathname.startsWith("/collection/tracks")) return { kind: "liked" };
     if (host === "open.spotify.com") {
       const m = u.pathname.match(/\/(playlist|album|artist|track|show|episode)\/([A-Za-z0-9]+)/);
       if (m) return { kind: "spotify", uri: `spotify:${m[1]}:${m[2]}` };
@@ -537,13 +538,14 @@ body {
   function show(which) {
     $("idle").hidden = which !== "idle";
     $("yt-host").hidden = which !== "youtube";
-    $("sp-host").hidden = which !== "spotify";
+    $("sp-host").hidden = which !== "spotify" && which !== "liked";
     $("pod").hidden = which !== "apple";
-    $("yt-controls").hidden = which !== "youtube";
+    $("yt-controls").hidden = which !== "youtube" && which !== "liked";
+    $("c-reset").hidden = which !== "youtube";
   }
   function stopOthers(kind) {
     if (kind !== "youtube" && ytReady) { try { yt.pauseVideo(); } catch {} }
-    if (kind !== "spotify" && spReady) { try { sp.pause(); } catch {} }
+    if (kind !== "spotify" && kind !== "liked" && spReady) { try { sp.pause(); } catch {} }
     if (kind !== "apple" && $("pod").getAttribute("src")) $("pod").removeAttribute("src");
   }
   const ytList = () => { try { return JSON.stringify(yt.getPlaylist() || []); } catch { return "[]"; } };
@@ -589,7 +591,8 @@ body {
     if (sp) { sp.loadUri(p.target.uri); sp.play(); return; }
     spApi.createController($("sp"), { width: "100%", height: "100%", uri: p.target.uri }, (c) => {
       sp = c; spReady = true;
-      sp.addListener("ready", () => { if (playing && playing.kind === "spotify") sp.play(); });
+      sp.addListener("ready", () => { if (playing && (playing.kind === "spotify" || playing.kind === "liked")) sp.play(); });
+      sp.addListener("playback_update", (e) => likedProgress(e.data || {}));
     });
   }
 
@@ -608,6 +611,9 @@ body {
       show("spotify");
       note("If Spotify only plays 30-second previews, log in at open.spotify.com in Safari on this iPad, or use Open in app.");
       if (spApi) startSpotify(playing); else { spPending = playing; $("np-sub").textContent = "Loading the Spotify player…"; }
+    } else if (target.kind === "liked") {
+      show("liked");
+      startLiked();
     } else if (target.kind === "apple") {
       show("apple");
       $("pod").src = target.src;
@@ -616,14 +622,15 @@ body {
       show("idle");
       $("idle").firstElementChild.innerHTML = "";
       $("idle").firstElementChild.append(el("b", null, "This link can’t play inside the hub"), "Use Open in app.");
-      if (/open\.spotify\.com\/collection/.test(p.url)) note("Spotify doesn’t allow Liked Songs in embedded players. Save them to a playlist to play them here.");
     }
     render();
   }
 
-  $("c-prev").addEventListener("click", () => { if (ytReady) yt.previousVideo(); });
-  $("c-next").addEventListener("click", () => { if (ytReady) yt.nextVideo(); });
+  const likedOn = () => playing && playing.kind === "liked";
+  $("c-prev").addEventListener("click", () => { if (likedOn()) likedStep(-1); else if (ytReady) yt.previousVideo(); });
+  $("c-next").addEventListener("click", () => { if (likedOn()) likedStep(1); else if (ytReady) yt.nextVideo(); });
   $("c-play").addEventListener("click", () => {
+    if (likedOn()) { if (sp) sp.togglePlay(); return; }
     if (!ytReady) return;
     yt.getPlayerState() === YT.PlayerState.PLAYING ? yt.pauseVideo() : yt.playVideo();
   });
@@ -636,6 +643,7 @@ body {
   $("c-shuffle").addEventListener("click", () => {
     shuffle = !shuffle; save(SHUFFLE_KEY, shuffle); renderShuffle();
     if (ytReady) { try { yt.setShuffle(shuffle); } catch {} }
+    likedReorder();
   });
 
   /* ---------- editor ---------- */
@@ -813,11 +821,118 @@ body {
   $("yts-change").addEventListener("click", () => { ytsKeyEdit = true; $("yts-key").value = load(YT_KEY, ""); renderYtSearch(); });
   $("yts-clear").addEventListener("click", () => { $("yts-results").textContent = ""; $("yts-count").textContent = ""; $("yts-q").value = ""; ytsErr(""); renderYtSearch(); });
 
+  /* ---------- Liked Songs ---------- */
+  // Spotify's embedded player can't open Liked Songs, so the hub reads the list through the Web API
+  // and plays it one track at a time in the Spotify player, moving on when each track ends.
+  const liked = { tracks: [], total: 0, loading: null, order: [], pos: 0, played: false, last: 0, dur: 0 };
+  async function spFetch(url) {
+    let token = await accessToken();
+    if (!token) throw new Error("signed-out");
+    let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (res.status === 401) {
+      const tok = load(SP_TOKEN, {}) || {}; tok.expires = 0; save(SP_TOKEN, tok);
+      token = await accessToken();
+      if (!token) throw new Error("signed-out");
+      res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    }
+    if (!res.ok) {
+      const why = await res.json().then((j) => (j.error && j.error.message) || "", () => "");
+      throw new Error(`Spotify refused to share your Liked Songs (HTTP ${res.status}${why ? `: ${why}` : ""}).`);
+    }
+    return res.json();
+  }
+  const trackOf = (it) => it && it.track && it.track.uri && !it.track.is_local
+    ? { uri: it.track.uri, name: it.track.name, artists: (it.track.artists || []).map((a) => a.name).join(", ") } : null;
+  // Loads the first page and resolves; the rest keep loading in the background.
+  function loadLiked() {
+    if (liked.loading) return liked.loading;
+    liked.loading = (async () => {
+      const first = await spFetch("https://api.spotify.com/v1/me/tracks?limit=50&market=from_token");
+      liked.total = first.total || 0;
+      liked.tracks = (first.items || []).map(trackOf).filter(Boolean);
+      likedReorder(true);
+      (async () => {
+        let next = first.next;
+        while (next && liked.tracks.length < 5000) {
+          try {
+            const page = await spFetch(next);
+            const start = liked.tracks.length;
+            liked.tracks.push(...(page.items || []).map(trackOf).filter(Boolean));
+            likedAppend(start);
+            next = page.next;
+          } catch { break; }
+        }
+      })();
+    })().catch((e) => { liked.loading = null; throw e; });
+    return liked.loading;
+  }
+  const shuffled = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  // Rebuild the play order around the current track: in shuffle, everything not yet played is shuffled.
+  function likedReorder(fresh) {
+    const all = liked.tracks.map((_, i) => i);
+    if (fresh || !liked.order.length) { liked.order = shuffle ? shuffled(all) : all; liked.pos = 0; return; }
+    const cur = liked.order[liked.pos];
+    const rest = all.filter((i) => i !== cur);
+    liked.order = [cur, ...(shuffle ? shuffled(rest) : rest.filter((i) => i > cur).concat(rest.filter((i) => i < cur)))];
+    liked.pos = 0;
+  }
+  function likedAppend(start) {
+    const added = liked.tracks.slice(start).map((_, k) => start + k);
+    if (!shuffle) { liked.order.push(...added); return; }
+    // spread newly loaded songs randomly through the part of the queue not played yet
+    const ahead = liked.order.slice(liked.pos + 1).concat(added);
+    liked.order = liked.order.slice(0, liked.pos + 1).concat(shuffled(ahead));
+  }
+  async function startLiked() {
+    const p = playing;
+    $("np-sub").textContent = "Loading your Liked Songs…";
+    try { await loadLiked(); }
+    catch (e) {
+      if (playing !== p) return;
+      show("idle");
+      $("idle").firstElementChild.innerHTML = "";
+      if (e.message === "signed-out") {
+        $("idle").firstElementChild.append(el("b", null, "Connect Spotify to play Liked Songs here"), "Tap Search Spotify, then Connect Spotify.");
+        note("The hub needs permission to read your Liked Songs. If you connected before, connect once more to give it.");
+      } else {
+        $("idle").firstElementChild.append(el("b", null, "Couldn’t load your Liked Songs"), "Use Open in app.");
+        note(e.message);
+      }
+      return;
+    }
+    if (playing !== p) return;
+    if (!liked.tracks.length) { note("Your Liked Songs list is empty."); return; }
+    likedPlayAt(liked.pos);
+  }
+  function likedPlayAt(pos) {
+    if (!liked.order.length) return;
+    liked.pos = (pos + liked.order.length) % liked.order.length;
+    const t = liked.tracks[liked.order[liked.pos]];
+    liked.played = false; liked.last = 0; liked.dur = 0;
+    playing.target = { kind: "liked", uri: t.uri };
+    $("np-sub").textContent = `${t.name} — ${t.artists} · ${liked.pos + 1} of ${liked.total || liked.tracks.length}`;
+    if (spApi) startSpotify(playing); else spPending = playing;
+  }
+  function likedStep(dir) { if (likedOn()) likedPlayAt(liked.pos + dir); }
+  // The embed reports position and pause state; a track that played to (nearly) its end moves the queue on.
+  function likedProgress(d) {
+    if (!likedOn()) return;
+    if (!d.isPaused && d.position > 0) { liked.played = true; liked.last = d.position; liked.dur = d.duration || liked.dur; note(""); return; }
+    if (liked.played && d.isPaused && liked.dur > 0 && (liked.dur - liked.last < 2500 || (d.position === 0 && liked.last > liked.dur - 5000))) {
+      liked.played = false;
+      likedStep(1);
+      // if the iPad blocks starting the next song on its own, say how to continue
+      setTimeout(() => { if (likedOn() && !liked.played) note("If the next song doesn’t start, tap play in the Spotify player."); }, 4000);
+    }
+  }
+
   /* ---------- Spotify search ---------- */
   // Spotify's Web API with the Authorization Code + PKCE flow: only the (public) Client ID is stored,
   // never a secret. Tokens stay on this iPad. Results play in the Spotify player like presets.
-  // user-read-private lets search use the account's country; tokens from before it was asked for are dropped.
-  const SP_SCOPE = "user-read-private";
+  // user-read-private lets search use the account's country; user-library-read reads Liked Songs.
+  // Tokens issued without every scope here are dropped, which sends the viewer back to Connect.
+  const SP_SCOPE = "user-read-private user-library-read";
+  const hasScopes = (tok) => SP_SCOPE.split(" ").every((sc) => ((tok && tok.scope) || "").split(" ").includes(sc));
   const SP_CLIENT = "music-hub:sp-client", SP_TOKEN = "music-hub:sp-token", SP_VERIFIER = "music-hub:sp-verifier", SP_TYPE = "music-hub:sp-type";
   const REDIRECT = location.origin + location.pathname;
   const S_TYPES = [["all", "All"], ["track", "Songs"], ["artist", "Artists"], ["album", "Albums"], ["playlist", "Playlists"], ["show", "Podcasts"]];
@@ -861,7 +976,7 @@ body {
   async function accessToken() {
     const tok = load(SP_TOKEN, null);
     if (!tok || !tok.refresh) return null;
-    if (!(tok.scope || "").includes(SP_SCOPE)) { save(SP_TOKEN, null); return null; }
+    if (!hasScopes(tok)) { save(SP_TOKEN, null); return null; }
     if (tok.access && Date.now() < tok.expires) return tok.access;
     try { return (await tokenRequest({ grant_type: "refresh_token", refresh_token: tok.refresh, client_id: load(SP_CLIENT, "") })).access; }
     catch { save(SP_TOKEN, null); return null; }
@@ -890,7 +1005,7 @@ body {
 
   function sErr(msg) { const e = $("s-err"); e.textContent = msg || ""; e.hidden = !msg; }
   function renderSearchSheet() {
-    const t0 = load(SP_TOKEN, null) || {}, connected = !!t0.refresh && (t0.scope || "").includes(SP_SCOPE);
+    const t0 = load(SP_TOKEN, null) || {}, connected = !!t0.refresh && hasScopes(t0);
     $("s-setup").hidden = connected;
     ["s-row", "s-types", "s-results", "s-actions"].forEach((id) => { $(id).hidden = !connected; });
     $("s-redirect").textContent = REDIRECT;
