@@ -15,7 +15,7 @@
 :root {
   --bg: #121110; --panel: #1c1a18; --raise: #26231f; --line: #34302b;
   --ink: #f1ebe1; --muted: #9a9084; --amber: #ffb547;
-  --spotify: #4fbf7a; --podcast: #a984f0; --youtube: #ff5d50; --danger: #ff6b5e;
+  --ok: #4fbf7a; --youtube: #ff5d50; --danger: #ff6b5e;
   --font-body: "Figtree", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "IBM Plex Mono", "SF Mono", Menlo, monospace;
   color-scheme: dark;
@@ -55,25 +55,17 @@ body {
 .clock { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
 .clock small { font-size: .38em; margin-left: .35em; color: color-mix(in srgb, var(--amber) 60%, var(--bg)); }
 
-/* ---------- source selector ---------- */
+/* ---------- tools bar ---------- */
 .bar { grid-area: bar; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
-.sources { display: flex; gap: 4px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
-.src { font: 700 .92em var(--font-body); color: var(--muted); background: transparent; border: 0; border-radius: 999px;
-  padding: .55em 1em; cursor: pointer; display: inline-flex; align-items: center; gap: .5em; }
-.src .dot { width: .6em; height: .6em; border-radius: 50%; background: var(--c, var(--muted)); }
-.src[aria-pressed="true"] { background: var(--raise); color: var(--ink); }
 .bar .tools { display: flex; gap: 6px; margin-left: auto; }
 .btn { font: 600 .85em var(--font-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line);
   border-radius: 10px; padding: .6em .9em; cursor: pointer; text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: .4em; }
 .btn.on { background: var(--amber); border-color: var(--amber); color: #1a1205; }
 .btn:disabled { opacity: .35; cursor: default; }
-.btn:focus-visible, .src:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.btn:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
 
 /* ---------- presets ---------- */
 .presets { grid-area: presets; overflow-y: auto; -webkit-overflow-scrolling: touch; display: grid; align-content: start; gap: 10px; padding-bottom: 8px; min-width: 0; }
-.group { display: grid; gap: 10px; }
-.group h2 { margin: 4px 2px 0; font: 600 .72em var(--font-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: .6em; }
-.group h2::before { content: ""; width: .6em; height: .6em; border-radius: 50%; background: var(--c); }
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
 .preset {
   position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 14px;
@@ -104,16 +96,6 @@ body {
 .screen { position: relative; flex: 1 1 auto; min-height: 180px; border-radius: 10px; overflow: hidden; background: #000; }
 @media (max-aspect-ratio: 1/1) { .screen { flex: none; aspect-ratio: 16 / 9; max-height: 34vh; min-height: 0; width: 100%; } }
 .screen > div, .screen iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-.spc { display: flex; align-items: center; gap: 20px; padding: 18px; background: #0b0a09; }
-.spc img { width: min(42%, 260px); aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--raise); flex: none; }
-.spc .info { min-width: 0; flex: 1; display: grid; gap: 8px; }
-.spc .ti { font-weight: 800; font-size: 1.35em; line-height: 1.15; overflow-wrap: anywhere; }
-.spc .ar { color: var(--muted); }
-.spc .prog { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.spc .prog i { display: block; height: 100%; width: 0; background: var(--spotify); }
-.spc .times { display: flex; justify-content: space-between; font: 500 .75em var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
-.spc label { font-size: .75em; color: var(--muted); display: grid; gap: 4px; }
-.spc select { font: 500 .9rem var(--font-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .45em .6em; max-width: 100%; }
 .idle { display: grid; place-items: center; text-align: center; color: var(--muted); padding: 20px; font-size: .95em; }
 .idle b { display: block; color: var(--ink); font-size: 1.2em; margin-bottom: 4px; }
 .np { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -145,14 +127,13 @@ body {
 .btn.danger { color: var(--danger); }
 .btn.danger.armed { background: var(--danger); border-color: var(--danger); color: #1a0705; }
 .err { color: var(--danger); font-size: .85em; margin: 0; }
-.ok { color: var(--spotify); font-size: .85em; margin: 0; }
-/* ---------- Spotify search ---------- */
-#search form { width: min(760px, 100%); }
+.ok { color: var(--ok); font-size: .85em; margin: 0; }
+/* ---------- search results ---------- */
 .s-row { display: flex; gap: 8px; }
 .s-row input { flex: 1; }
 .s-types { display: flex; gap: 6px; flex-wrap: wrap; }
 .s-types button { font: 700 .85em var(--font-body); color: var(--muted); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: .45em .9em; cursor: pointer; }
-.s-types button[aria-pressed="true"] { background: var(--spotify); border-color: var(--spotify); color: #06170c; }
+.s-types button[aria-pressed="true"] { background: var(--youtube); border-color: var(--youtube); color: #200604; }
 .s-results { max-height: 55vh; overflow-y: auto; -webkit-overflow-scrolling: touch; display: grid; gap: 4px; align-content: start; min-height: 120px; }
 .s-results h4 { margin: 10px 2px 2px; font: 600 .7em var(--font-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
 .s-results .msg { color: var(--muted); padding: 16px 4px; }
@@ -195,10 +176,8 @@ body {
     <div class="clock" id="clock">--:--</div>
   </header>
 
-  <nav class="bar" aria-label="Sources">
-    <div class="sources" id="sources"></div>
+  <nav class="bar" aria-label="Hub tools">
     <div class="tools">
-      <button class="btn" type="button" id="search-open">Search Spotify</button>
       <button class="btn" type="button" id="backup-open">Backup</button>
       <button class="btn" type="button" id="edit-toggle">Edit</button>
     </div>
@@ -238,26 +217,12 @@ body {
     <div class="screen" id="screen">
       <div class="idle" id="idle"><div><b>Nothing playing</b>Tap a preset and it plays here.</div></div>
       <div id="yt-host" hidden><div id="yt"></div></div>
-      <div id="sp-host" hidden><div id="sp"></div></div>
-      <div id="spc" class="spc" hidden>
-        <img id="spc-art" alt="">
-        <div class="info">
-          <div class="ti" id="spc-title">Starting Spotify…</div>
-          <div class="ar" id="spc-artist"></div>
-          <div class="prog"><i id="spc-bar"></i></div>
-          <div class="times"><span id="spc-pos">0:00</span><span id="spc-dur">0:00</span></div>
-          <label for="spc-device">Playing on
-            <select id="spc-device"><option value="">Looking for devices…</option></select></label>
-        </div>
-      </div>
-      <iframe id="pod" title="Podcast player" hidden allow="autoplay *; encrypted-media *; clipboard-write" sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation"></iframe>
     </div>
     <div class="np">
       <div class="txt">
         <div class="title" id="np-title">—</div>
         <div class="sub" id="np-sub">Player is idle</div>
       </div>
-      <button class="btn" type="button" id="np-mode" hidden></button>
       <a class="btn" id="np-open" href="#" target="_blank" rel="noopener" hidden>Open in app</a>
     </div>
     <div class="controls" id="yt-controls" hidden>
@@ -277,20 +242,12 @@ body {
   <form id="form" novalidate>
     <h3 id="form-title">Add preset</h3>
     <label for="f-url">Link
-      <input id="f-url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste a Spotify, podcast or YouTube link"></label>
+      <input id="f-url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste a YouTube playlist or video link"></label>
     <p class="hint">In the app, use Share › Copy Link, then paste it here.</p>
     <label for="f-name">Name on the button
       <input id="f-name" autocomplete="off" placeholder="Sunday jazz"></label>
-    <div class="row">
-      <label for="f-source">Source
-        <select id="f-source">
-          <option value="spotify">Spotify</option>
-          <option value="podcast">Podcast</option>
-          <option value="youtube">YouTube</option>
-        </select></label>
-      <label for="f-icon">Icon (optional)
-        <input id="f-icon" autocomplete="off" maxlength="4" placeholder="🎷"></label>
-    </div>
+    <label for="f-icon">Icon (optional)
+      <input id="f-icon" autocomplete="off" maxlength="4" placeholder="🎷"></label>
     <div>
       <label>Colour</label>
       <div class="swatches" id="swatches" role="group" aria-label="Colour"></div>
@@ -301,36 +258,6 @@ body {
       <span class="spacer"></span>
       <button class="btn" type="button" id="f-cancel">Cancel</button>
       <button class="btn on" type="submit">Save</button>
-    </div>
-  </form>
-</div>
-
-<div class="sheet" id="search" hidden>
-  <form id="search-form" novalidate>
-    <h3>Search Spotify</h3>
-    <div id="s-setup" hidden style="display:grid;gap:12px">
-      <p class="hint" style="margin:0">Searching needs a free Spotify developer app, set up once. It takes about five minutes.</p>
-      <ol class="steps">
-        <li>On any device, open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>, log in with your Spotify account and tap <b>Create app</b>.</li>
-        <li>Name it “Music Hub”. For <b>Redirect URI</b> enter <code id="s-redirect"></code> <button class="btn" type="button" id="s-copy-redirect">Copy</button></li>
-        <li>Tick <b>Web API</b>, agree to the terms and save.</li>
-        <li>Open the app’s <b>Settings</b>, copy the <b>Client ID</b> and paste it here.</li>
-      </ol>
-      <label for="s-client">Client ID
-        <input id="s-client" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="32 letters and numbers"></label>
-      <div class="actions"><span class="spacer"></span><button class="btn" type="button" id="s-close-setup">Close</button><button class="btn on" type="button" id="s-connect">Connect Spotify</button></div>
-    </div>
-    <div class="s-row" id="s-row" hidden>
-      <input id="s-q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Songs, artists, albums, playlists, podcasts">
-      <button class="btn on" type="submit">Search</button>
-    </div>
-    <div class="s-types" id="s-types" hidden></div>
-    <div class="s-results" id="s-results" hidden></div>
-    <p class="err" id="s-err" hidden></p>
-    <div class="actions" id="s-actions" hidden>
-      <button class="btn" type="button" id="s-disconnect">Disconnect Spotify</button>
-      <span class="spacer"></span>
-      <button class="btn" type="button" id="s-close">Close</button>
     </div>
   </form>
 </div>
@@ -356,12 +283,10 @@ body {
 (() => {
   "use strict";
   const SOURCES = {
-    spotify: { label: "Spotify", color: "var(--spotify)" },
-    podcast: { label: "Podcasts", color: "var(--podcast)" },
     youtube: { label: "YouTube", color: "var(--youtube)" },
   };
   const SWATCHES = ["", "#9cc4f2", "#f2b441", "#c9a27a", "#f08a6c", "#7fd1b9", "#c3a7ee", "#e7e07a"];
-  const KEY = "music-hub:presets", FILTER_KEY = "music-hub:filter", SHUFFLE_KEY = "music-hub:shuffle";
+  const KEY = "music-hub:presets", SHUFFLE_KEY = "music-hub:shuffle";
 
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -371,7 +296,13 @@ body {
   const uid = () => Math.random().toString(36).slice(2, 10);
 
   let presets = load(KEY, []);
-  let filter = load(FILTER_KEY, "all");
+  // The hub is YouTube only now (Spotify and podcasts were removed): drop other presets and
+  // anything the Spotify sign-in or the old source tabs saved on this iPad.
+  if (presets.some((p) => p.source !== "youtube")) {
+    presets = presets.filter((p) => p.source === "youtube");
+    save(KEY, presets);
+  }
+  try { Object.keys(localStorage).filter((k) => k.startsWith("music-hub:sp-") || k === "music-hub:filter").forEach((k) => localStorage.removeItem(k)); } catch {}
   let shuffle = load(SHUFFLE_KEY, false);
   let editing = false, playing = null;
 
@@ -381,14 +312,11 @@ body {
   function detectSource(url) {
     const u = url.toLowerCase();
     if (/youtube\.com|youtu\.be/.test(u)) return "youtube";
-    if (/open\.spotify\.com\/(show|episode)\//.test(u)) return "podcast";
-    if (/spotify/.test(u)) return "spotify";
-    if (/podcasts\.apple|pca\.st|overcast\.fm|pocketcasts|castro\.fm/.test(u)) return "podcast";
     return null;
   }
 
   /* ---------- what each link plays as ---------- */
-  // -> { kind: "youtube", list, video } | { kind: "spotify", uri } | { kind: "apple", src } | { kind: "link" }
+  // -> { kind: "youtube", list, video } | { kind: "link" }
   function playable(url) {
     let u; try { u = new URL(url); } catch { return { kind: "link" }; }
     const host = u.hostname.replace(/^www\.|^m\.|^music\./, "");
@@ -397,13 +325,6 @@ body {
       const video = host === "youtu.be" ? u.pathname.slice(1) : u.searchParams.get("v");
       if (list || video) return { kind: "youtube", list, video };
     }
-    if (host === "open.spotify.com" && u.pathname.startsWith("/collection/tracks")) return { kind: "liked" };
-    if (host === "open.spotify.com") {
-      const m = u.pathname.match(/\/(playlist|album|artist|track|show|episode)\/([A-Za-z0-9]+)/);
-      if (m) return { kind: "spotify", uri: `spotify:${m[1]}:${m[2]}` };
-    }
-    if (u.protocol === "spotify:") return { kind: "spotify", uri: url };
-    if (host === "podcasts.apple.com") return { kind: "apple", src: `https://embed.podcasts.apple.com${u.pathname}${u.search}` };
     return { kind: "link" };
   }
 
@@ -415,23 +336,8 @@ body {
   }
   function renderDisplay() {
     if (!playing) { $("now-lab").textContent = "Ready"; $("now-val").textContent = "Pick a preset"; return; }
-    $("now-lab").textContent = `Now playing · ${SOURCES[playing.source]?.label || ""}`;
+    $("now-lab").textContent = "Now playing";
     $("now-val").textContent = `▶ ${playing.name}`;
-  }
-
-  /* ---------- source selector ---------- */
-  function renderSources() {
-    const box = $("sources"); box.textContent = "";
-    const counts = { all: presets.length };
-    presets.forEach((p) => { counts[p.source] = (counts[p.source] || 0) + 1; });
-    [["all", "All", "var(--amber)"], ...Object.entries(SOURCES).map(([k, s]) => [k, s.label, s.color])].forEach(([key, label, color]) => {
-      const b = el("button", "src"); b.type = "button";
-      b.style.setProperty("--c", color);
-      b.setAttribute("aria-pressed", String(filter === key));
-      b.append(el("span", "dot"), `${label}${counts[key] ? ` ${counts[key]}` : ""}`);
-      b.addEventListener("click", () => { filter = key; save(FILTER_KEY, filter); render(); });
-      box.append(b);
-    });
   }
 
   /* ---------- presets ---------- */
@@ -440,7 +346,7 @@ body {
     const t = el(editing ? "div" : "button", "preset" + (playing && playing.id === p.id ? " playing" : ""));
     t.style.setProperty("--c", color);
     const top = el("div", "top");
-    top.append(el("span", "num", `P${pad(n)}`), el("span", "tag", playing && playing.id === p.id ? "Playing" : SOURCES[p.source]?.label || "Link"));
+    top.append(el("span", "num", `P${pad(n)}`), el("span", "tag", playing && playing.id === p.id ? "Playing" : /[?&]list=/.test(p.url) ? "Playlist" : "Video"));
     const name = el("div", "name");
     if (p.icon) name.append(el("span", null, p.icon));
     name.append(el("span", null, p.name));
@@ -463,34 +369,23 @@ body {
   }
   function renderPresets() {
     const box = $("presets"); box.textContent = "";
-    const all = sorted();
-    const numbers = new Map(Object.keys(SOURCES).flatMap((k) => all.filter((p) => p.source === k)).map((p, i) => [p.id, i + 1]));
-    const groups = filter === "all" ? Object.keys(SOURCES) : [filter];
-    let shown = 0;
-    groups.forEach((key) => {
-      const list = all.filter((p) => p.source === key);
-      if (!list.length && !editing) return;
-      const g = el("section", "group"), h = el("h2", null, SOURCES[key].label), grid = el("div", "grid");
-      h.style.setProperty("--c", SOURCES[key].color);
-      list.forEach((p) => grid.append(presetTile(p, numbers.get(p.id), list)));
-      if (editing) {
-        const add = el("button", "preset add", `+ Add ${key === "podcast" ? "podcast" : SOURCES[key].label + " link"}`);
-        add.type = "button"; add.addEventListener("click", () => openSheet(null, key));
-        grid.append(add);
-      }
-      g.append(h, grid); box.append(g); shown += list.length;
-    });
-    if (!shown && !editing) {
-      const d = el("div", "empty");
-      d.append(el("b", null, presets.length ? `No ${SOURCES[filter].label} presets yet.` : "No presets on this iPad yet."),
-        el("span", null, "Tap Edit to paste a link from Spotify, Podcasts or YouTube, or restore a saved list from Backup."));
-      const b = el("button", "btn on", "Add a preset"); b.type = "button";
-      b.addEventListener("click", () => { editing = true; render(); openSheet(null); });
-      d.append(b); box.append(d);
+    const all = sorted(), grid = el("div", "grid");
+    all.forEach((p, i) => grid.append(presetTile(p, i + 1, all)));
+    if (editing) {
+      const add = el("button", "preset add", "+ Add YouTube link");
+      add.type = "button"; add.addEventListener("click", () => openSheet(null));
+      grid.append(add);
     }
+    if (all.length || editing) { box.append(grid); return; }
+    const d = el("div", "empty");
+    d.append(el("b", null, "No presets on this iPad yet."),
+      el("span", null, "Search above and tap + Preset, tap Edit to paste a YouTube link, or restore a saved list from Backup."));
+    const b = el("button", "btn on", "Add a preset"); b.type = "button";
+    b.addEventListener("click", () => { editing = true; render(); openSheet(null); });
+    d.append(b); box.append(d);
   }
   function render() {
-    renderDisplay(); renderSources(); renderPresets();
+    renderDisplay(); renderPresets();
     const e = $("edit-toggle"); e.textContent = editing ? "Done" : "Edit"; e.classList.toggle("on", editing);
     renderYtSearch();
   }
@@ -507,7 +402,6 @@ body {
 
   /* ---------- player ---------- */
   let yt = null, ytReady = false, ytPending = null;
-  let sp = null, spReady = false, spPending = null;
 
   // One YouTube player is kept for the whole session. iPad Safari only lets a player start with sound
   // after a tap inside it, and a kept player keeps that permission; a rebuilt one loses it.
@@ -553,14 +447,11 @@ body {
     });
   }
   window.onYouTubeIframeAPIReady = () => { ytApi = true; makeYouTube(null); };
-  // The Spotify controller needs a first item, so it is created on the first Spotify tap.
-  let spApi = null;
-  window.onSpotifyIframeApiReady = (api) => { spApi = api; if (spPending) { const p = spPending; spPending = null; startSpotify(p); } };
   function loadScript(src) { const s = document.createElement("script"); s.src = src; s.async = true; document.head.append(s); }
   loadScript("https://www.youtube.com/iframe_api");
-  loadScript("https://open.spotify.com/embed/iframe-api/v1");
   setTimeout(() => { if (!ytApi && playing && playing.kind === "youtube") note("YouTube’s player script didn’t load. Tap Reset to try again."); }, 10000);
 
+  const shuffled = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   function note(msg) { $("np-note").textContent = msg; $("np-note").hidden = !msg; if (msg) diag(`note: ${msg}`); }
   // A short log of what the players did, shown under the player on request, for troubleshooting.
   const diagLines = [];
@@ -578,17 +469,11 @@ body {
   function show(which) {
     $("idle").hidden = which !== "idle";
     $("yt-host").hidden = which !== "youtube";
-    $("sp-host").hidden = which !== "spotify" && which !== "liked";
-    $("spc").hidden = which !== "app";
-    $("pod").hidden = which !== "apple";
-    $("yt-controls").hidden = which !== "youtube" && which !== "liked" && which !== "app";
+    $("yt-controls").hidden = which !== "youtube";
     $("c-reset").hidden = which !== "youtube";
   }
   function stopOthers(kind) {
     if (kind !== "youtube" && ytReady) { try { yt.pauseVideo(); } catch {} }
-    if (kind !== "spotify" && kind !== "liked" && spReady) { try { sp.pause(); } catch {} }
-    if (kind !== "apple" && $("pod").getAttribute("src")) $("pod").removeAttribute("src");
-    if (kind !== "app" && app.active) { app.active = false; appCall("PUT", "/me/player/pause").catch(() => {}); }
   }
   const ytList = () => { try { return JSON.stringify(yt.getPlaylist() || []); } catch { return "[]"; } };
   const ytVideo = () => { try { return (yt.getVideoData() || {}).video_id || ""; } catch { return ""; } };
@@ -632,30 +517,15 @@ body {
       }, 4000);
     }, 6000);
   }
-  function startSpotify(p) {
-    if (sp) { sp.loadUri(p.target.uri); sp.play(); return; }
-    spApi.createController($("sp"), { width: "100%", height: "100%", uri: p.target.uri }, (c) => {
-      sp = c; spReady = true;
-      sp.addListener("ready", () => { if (playing && (playing.kind === "spotify" || playing.kind === "liked")) sp.play(); });
-      sp.addListener("playback_update", (e) => likedProgress(e.data || {}));
-    });
-  }
-
   function play(p) {
     diag(`tap “${p.name}” ${p.url}`);
-    let target = playable(p.url);
+    const target = playable(p.url);
     diag(`link read as ${JSON.stringify(target)}`);
-    // With Spotify connected, Spotify items play in the Spotify app (full tracks) and the hub is the remote.
-    const isSpotify = target.kind === "spotify" || target.kind === "liked";
-    if (isSpotify && spConnected() && load(SP_MODE, "app") === "app") target = { ...target, kind: "app", liked: target.kind === "liked" };
-    const mode = $("np-mode");
-    mode.hidden = !(isSpotify && spConnected());
-    mode.textContent = target.kind === "app" ? "Play in hub instead" : "Play in Spotify app";
     playing = { ...p, kind: target.kind, target };
     stopOthers(target.kind);
     note("");
     $("np-title").textContent = p.name;
-    $("np-sub").textContent = SOURCES[p.source]?.label || "";
+    $("np-sub").textContent = "YouTube";
     const open = $("np-open"); open.href = p.url; open.hidden = false;
     if (target.kind === "youtube" && target.list && load(YT_KEY, "")) {
       show("youtube");
@@ -664,20 +534,6 @@ body {
       show("youtube");
       diag(`no YouTube API key set${target.list ? ", so the player loads the list itself" : ""}`);
       if (ytReady) startYouTube(playing); else if (ytApi && yt === null) { makeYouTube(playing.target); } else { ytPending = playing; $("np-sub").textContent = "Loading the YouTube player…"; }
-    } else if (target.kind === "app") {
-      show("app");
-      appPlay(playing);
-    } else if (target.kind === "spotify") {
-      show("spotify");
-      note(spConnected() ? "Only hearing 30-second previews? Tap Log in inside the Spotify player once, or switch to Play in Spotify app." : "Connect Spotify (Search Spotify › Connect) to play full songs through the Spotify app.");
-      if (spApi) startSpotify(playing); else { spPending = playing; $("np-sub").textContent = "Loading the Spotify player…"; }
-    } else if (target.kind === "liked") {
-      show("liked");
-      startLiked();
-    } else if (target.kind === "apple") {
-      show("apple");
-      $("pod").src = target.src;
-      note("Pick an episode in the player, then press play.");
     } else {
       show("idle");
       $("idle").firstElementChild.innerHTML = "";
@@ -686,13 +542,9 @@ body {
     render();
   }
 
-  const likedOn = () => playing && playing.kind === "liked";
-  const appOn = () => playing && playing.kind === "app";
-  $("c-prev").addEventListener("click", () => { if (appOn()) appControl("POST", "/me/player/previous"); else if (likedOn()) likedStep(-1); else if (ytReady) yt.previousVideo(); });
-  $("c-next").addEventListener("click", () => { if (appOn()) appControl("POST", "/me/player/next"); else if (likedOn()) likedStep(1); else if (ytReady) yt.nextVideo(); });
+  $("c-prev").addEventListener("click", () => { if (ytReady) yt.previousVideo(); });
+  $("c-next").addEventListener("click", () => { if (ytReady) yt.nextVideo(); });
   $("c-play").addEventListener("click", () => {
-    if (appOn()) { appControl("PUT", app.playing ? "/me/player/pause" : "/me/player/play"); return; }
-    if (likedOn()) { if (sp) sp.togglePlay(); return; }
     if (!ytReady) return;
     yt.getPlayerState() === YT.PlayerState.PLAYING ? yt.pauseVideo() : yt.playVideo();
   });
@@ -705,30 +557,26 @@ body {
   $("c-shuffle").addEventListener("click", () => {
     shuffle = !shuffle; save(SHUFFLE_KEY, shuffle); renderShuffle();
     if (ytReady) { try { yt.setShuffle(shuffle); } catch {} }
-    likedReorder();
-    if (appOn()) appControl("PUT", `/me/player/shuffle?state=${shuffle}`);
   });
 
   /* ---------- editor ---------- */
   let current = null, pickedColor = "", deleteArmed = false;
   function renderSwatches() {
     const box = $("swatches"); box.textContent = "";
-    const src = $("f-source").value;
     SWATCHES.forEach((c) => {
       const b = el("button"); b.type = "button";
-      b.style.setProperty("--c", c || SOURCES[src].color);
+      b.style.setProperty("--c", c || SOURCES.youtube.color);
       b.setAttribute("aria-label", c ? `Colour ${c}` : "Source colour");
       b.setAttribute("aria-pressed", String(pickedColor === c));
       b.addEventListener("click", () => { pickedColor = c; renderSwatches(); });
       box.append(b);
     });
   }
-  function openSheet(p, source) {
+  function openSheet(p) {
     current = p; deleteArmed = false;
     $("form-title").textContent = p ? "Edit preset" : "Add preset";
     $("f-url").value = p ? p.url : "";
     $("f-name").value = p ? p.name : "";
-    $("f-source").value = p ? p.source : (source || (filter !== "all" ? filter : "spotify"));
     $("f-icon").value = p?.icon || "";
     pickedColor = p?.color || "";
     const del = $("f-delete"); del.hidden = !p; del.textContent = "Delete"; del.classList.remove("armed");
@@ -741,14 +589,13 @@ body {
   function formError(msg) { const e = $("form-err"); e.textContent = msg; e.hidden = !msg; }
   $("f-cancel").addEventListener("click", closeSheet);
   $("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) closeSheet(); });
-  $("f-source").addEventListener("change", renderSwatches);
-  $("f-url").addEventListener("input", () => { const s = detectSource($("f-url").value); if (s) { $("f-source").value = s; renderSwatches(); } });
   $("form").addEventListener("submit", (e) => {
     e.preventDefault();
     const url = $("f-url").value.trim(), name = $("f-name").value.trim();
     if (!/^https?:\/\//i.test(url)) return formError("Paste a full link that starts with https://");
+    if (playable(url).kind !== "youtube") return formError("That isn’t a YouTube video or playlist link. In YouTube, use Share › Copy link.");
     if (!name) return formError("Give the button a name.");
-    const data = { name, url, source: $("f-source").value, color: pickedColor, icon: $("f-icon").value.trim() };
+    const data = { name, url, source: "youtube", color: pickedColor, icon: $("f-icon").value.trim() };
     if (current) Object.assign(current, data);
     else presets.push({ id: uid(), ...data, order: Math.max(0, ...presets.map((p) => p.order || 0)) + 10 });
     persist(); closeSheet(); render();
@@ -780,7 +627,7 @@ body {
       $("b-err").textContent = "That text isn’t a preset list. It should start with [ and contain name and url for each preset.";
       $("b-err").hidden = false; return;
     }
-    presets = list.map((p, i) => ({ id: uid(), name: p.name, url: p.url, source: SOURCES[p.source] ? p.source : (detectSource(p.url) || "spotify"),
+    presets = list.filter((p) => detectSource(p.url) === "youtube").map((p, i) => ({ id: uid(), name: p.name, url: p.url, source: "youtube",
       color: p.color || "", icon: p.icon || "", order: (i + 1) * 10 }));
     persist(); render();
     $("b-err").hidden = true; $("b-ok").textContent = `Restored ${presets.length} presets.`; $("b-ok").hidden = false;
@@ -874,7 +721,7 @@ body {
 
   function ytsErr(msg) { const e = $("yts-err"); e.textContent = msg || ""; e.hidden = !msg; }
   function renderYtSearch() {
-    const show = filter === "youtube" && !editing;
+    const show = !editing;
     $("yts").hidden = !show;
     if (!show) return;
     const key = load(YT_KEY, "");
@@ -961,438 +808,6 @@ body {
   });
   $("yts-change").addEventListener("click", () => { ytsKeyEdit = true; $("yts-key").value = load(YT_KEY, ""); renderYtSearch(); });
   $("yts-clear").addEventListener("click", () => { $("yts-results").textContent = ""; $("yts-count").textContent = ""; $("yts-q").value = ""; ytsErr(""); renderYtSearch(); });
-
-  /* ---------- Liked Songs ---------- */
-  // Spotify's embedded player can't open Liked Songs, so the hub reads the list through the Web API
-  // and plays it one track at a time in the Spotify player, moving on when each track ends.
-  const liked = { tracks: [], total: 0, loading: null, order: [], pos: 0, played: false, last: 0, dur: 0 };
-  async function spFetch(url) {
-    let token = await accessToken();
-    if (!token) throw new Error("signed-out");
-    let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (res.status === 401) {
-      const tok = load(SP_TOKEN, {}) || {}; tok.expires = 0; save(SP_TOKEN, tok);
-      token = await accessToken();
-      if (!token) throw new Error("signed-out");
-      res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    }
-    if (!res.ok) {
-      const why = await res.json().then((j) => (j.error && j.error.message) || "", () => "");
-      throw new Error(`Spotify refused to share your Liked Songs (HTTP ${res.status}${why ? `: ${why}` : ""}).`);
-    }
-    return res.json();
-  }
-  const trackOf = (it) => it && it.track && it.track.uri && !it.track.is_local
-    ? { uri: it.track.uri, name: it.track.name, artists: (it.track.artists || []).map((a) => a.name).join(", ") } : null;
-  // Loads the first page and resolves; the rest keep loading in the background.
-  function loadLiked() {
-    if (liked.loading) return liked.loading;
-    liked.loading = (async () => {
-      const first = await spFetch("https://api.spotify.com/v1/me/tracks?limit=50&market=from_token");
-      liked.total = first.total || 0;
-      liked.tracks = (first.items || []).map(trackOf).filter(Boolean);
-      likedReorder(true);
-      (async () => {
-        let next = first.next;
-        while (next && liked.tracks.length < 5000) {
-          try {
-            const page = await spFetch(next);
-            const start = liked.tracks.length;
-            liked.tracks.push(...(page.items || []).map(trackOf).filter(Boolean));
-            likedAppend(start);
-            next = page.next;
-          } catch { break; }
-        }
-      })();
-    })().catch((e) => { liked.loading = null; throw e; });
-    return liked.loading;
-  }
-  const shuffled = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  // Rebuild the play order around the current track: in shuffle, everything not yet played is shuffled.
-  function likedReorder(fresh) {
-    const all = liked.tracks.map((_, i) => i);
-    if (fresh || !liked.order.length) { liked.order = shuffle ? shuffled(all) : all; liked.pos = 0; return; }
-    const cur = liked.order[liked.pos];
-    const rest = all.filter((i) => i !== cur);
-    liked.order = [cur, ...(shuffle ? shuffled(rest) : rest.filter((i) => i > cur).concat(rest.filter((i) => i < cur)))];
-    liked.pos = 0;
-  }
-  function likedAppend(start) {
-    const added = liked.tracks.slice(start).map((_, k) => start + k);
-    if (!shuffle) { liked.order.push(...added); return; }
-    // spread newly loaded songs randomly through the part of the queue not played yet
-    const ahead = liked.order.slice(liked.pos + 1).concat(added);
-    liked.order = liked.order.slice(0, liked.pos + 1).concat(shuffled(ahead));
-  }
-  async function startLiked() {
-    const p = playing;
-    $("np-sub").textContent = "Loading your Liked Songs…";
-    try { await loadLiked(); }
-    catch (e) {
-      if (playing !== p) return;
-      show("idle");
-      $("idle").firstElementChild.innerHTML = "";
-      if (e.message === "signed-out") {
-        $("idle").firstElementChild.append(el("b", null, "Connect Spotify to play Liked Songs here"), "Tap Search Spotify, then Connect Spotify.");
-        note("The hub needs permission to read your Liked Songs. If you connected before, connect once more to give it.");
-      } else {
-        $("idle").firstElementChild.append(el("b", null, "Couldn’t load your Liked Songs"), "Use Open in app.");
-        note(e.message);
-      }
-      return;
-    }
-    if (playing !== p) return;
-    if (!liked.tracks.length) { note("Your Liked Songs list is empty."); return; }
-    likedPlayAt(liked.pos);
-  }
-  function likedPlayAt(pos) {
-    if (!liked.order.length) return;
-    liked.pos = (pos + liked.order.length) % liked.order.length;
-    const t = liked.tracks[liked.order[liked.pos]];
-    liked.played = false; liked.last = 0; liked.dur = 0;
-    playing.target = { kind: "liked", uri: t.uri };
-    $("np-sub").textContent = `${t.name} — ${t.artists} · ${liked.pos + 1} of ${liked.total || liked.tracks.length}`;
-    if (spApi) startSpotify(playing); else spPending = playing;
-  }
-  function likedStep(dir) { if (likedOn()) likedPlayAt(liked.pos + dir); }
-  // The embed reports position and pause state; a track that played to (nearly) its end moves the queue on.
-  function likedProgress(d) {
-    if (!likedOn()) return;
-    if (!d.isPaused && d.position > 0) { liked.played = true; liked.last = d.position; liked.dur = d.duration || liked.dur; note(""); return; }
-    if (liked.played && d.isPaused && liked.dur > 0 && (liked.dur - liked.last < 2500 || (d.position === 0 && liked.last > liked.dur - 5000))) {
-      liked.played = false;
-      likedStep(1);
-      // if the iPad blocks starting the next song on its own, say how to continue
-      setTimeout(() => { if (likedOn() && !liked.played) note("If the next song doesn’t start, tap play in the Spotify player."); }, 4000);
-    }
-  }
-
-  /* ---------- Spotify app remote ---------- */
-  // Plays through Spotify Connect: the Spotify app (on this iPad or another device) does the playing,
-  // so songs are full length with Premium, and the hub shows what's on and sends the controls.
-  const SP_DEVICE = "music-hub:sp-device", SP_MODE = "music-hub:sp-mode";
-  let devWatch = null;
-  $("np-mode").addEventListener("click", () => {
-    save(SP_MODE, load(SP_MODE, "app") === "app" ? "hub" : "app");
-    if (playing) { const { kind, target, ...p } = playing; play(p); }
-  });
-  const app = { active: false, playing: false, poll: null, me: null, devices: [] };
-  const spConnected = () => { const t = load(SP_TOKEN, null); return !!(t && t.refresh && hasScopes(t)); };
-  async function appCall(method, path, body) {
-    let token = await accessToken();
-    if (!token) throw Object.assign(new Error("Spotify isn’t connected. Tap Search Spotify, then Connect Spotify."), { code: "signed-out" });
-    const go = (tk) => fetch(`https://api.spotify.com/v1${path}`, {
-      method, headers: { Authorization: `Bearer ${tk}`, ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined,
-    });
-    let res = await go(token);
-    if (res.status === 401) {
-      const tok = load(SP_TOKEN, {}) || {}; tok.expires = 0; save(SP_TOKEN, tok);
-      token = await accessToken();
-      if (!token) throw Object.assign(new Error("Spotify signed out. Tap Search Spotify, then Connect Spotify."), { code: "signed-out" });
-      res = await go(token);
-    }
-    if (res.status === 204 || res.status === 202) return null;
-    const j = await res.json().catch(() => null);
-    if (!res.ok) {
-      const e = new Error((j && j.error && j.error.message) || `HTTP ${res.status}`);
-      e.status = res.status; e.reason = j && j.error && j.error.reason; throw e;
-    }
-    return j;
-  }
-  const mmss = (ms) => { const t = Math.max(0, Math.round((ms || 0) / 1000)); return `${Math.floor(t / 60)}:${pad(t % 60)}`; };
-
-  async function appDevices() {
-    const j = await appCall("GET", "/me/player/devices");
-    app.devices = (j && j.devices) || [];
-    const sel = $("spc-device"), want = load(SP_DEVICE, "");
-    sel.textContent = "";
-    if (!app.devices.length) sel.append(Object.assign(el("option", null, "No Spotify app open"), { value: "" }));
-    app.devices.forEach((d) => {
-      const o = el("option", null, `${d.name}${d.is_active ? " (playing)" : ""}`); o.value = d.id;
-      if (d.id === want || (!app.devices.some((x) => x.id === want) && d.is_active)) o.selected = true;
-      sel.append(o);
-    });
-    return app.devices;
-  }
-  // The remembered device, else whatever is active, else a tablet (this iPad), else the first one.
-  function pickDevice() {
-    const want = load(SP_DEVICE, ""), d = app.devices;
-    return (d.find((x) => x.id === want) || d.find((x) => x.is_active) || d.find((x) => /tablet/i.test(x.type)) || d[0] || {}).id || "";
-  }
-  // While the "open the Spotify app" message shows, keep looking; once the app is back, start the music.
-  function watchForDevice(p) {
-    clearInterval(devWatch);
-    const until = Date.now() + 120000;
-    devWatch = setInterval(async () => {
-      if (playing !== p || Date.now() > until) { clearInterval(devWatch); return; }
-      if (document.visibilityState !== "visible") return;
-      try { if ((await appDevices()).length) { clearInterval(devWatch); appPlay(p); } } catch {}
-    }, 3000);
-  }
-  function noDevice() {
-    $("spc-title").textContent = "Open the Spotify app on this iPad";
-    $("spc-artist").textContent = "Tap Open in app, then come back to the hub. The music starts by itself once Spotify is open. Or tap Play in hub instead.";
-    $("spc-art").removeAttribute("src");
-  }
-
-  async function appPlay(p) {
-    const t = p.target;
-    app.active = true;
-    $("spc-title").textContent = "Starting Spotify…"; $("spc-artist").textContent = "";
-    $("spc-bar").style.width = "0"; $("spc-pos").textContent = "0:00"; $("spc-dur").textContent = "0:00";
-    try {
-      await appDevices();
-      const device = pickDevice();
-      if (!device) { noDevice(); watchForDevice(p); return; }
-      if (playing !== p) return;
-      const q = `?device_id=${encodeURIComponent(device)}`;
-      await appCall("PUT", `/me/player/shuffle?state=${shuffle}&device_id=${encodeURIComponent(device)}`).catch(() => {});
-      let body;
-      if (t.liked) {
-        if (!app.me) app.me = await appCall("GET", "/me");
-        body = { context_uri: `spotify:user:${app.me.id}:collection` };
-      } else body = /^spotify:(track|episode):/.test(t.uri) ? { uris: [t.uri] } : { context_uri: t.uri };
-      try { await appPlayWithRetry(device, q, body); }
-      catch (e) {
-        if (!t.liked || e.status === 404 || e.status === 403 || e.status >= 500) throw e;
-        // Liked Songs as a context isn't accepted everywhere: send the songs themselves instead.
-        await loadLiked();
-        const uris = liked.order.slice(0, 100).map((i) => liked.tracks[i].uri);
-        await appPlayWithRetry(device, q, { uris });
-      }
-      save(SP_DEVICE, device);
-      note("");
-      appStartPolling();
-    } catch (e) {
-      if (playing !== p) return;
-      if (e.status === 404) { noDevice(); watchForDevice(p); return; }
-      if (e.status >= 500) {
-        $("spc-title").textContent = "Spotify couldn’t reach the Spotify app";
-        watchForDevice(p);
-        $("spc-artist").textContent = "The app is probably asleep in the background. Tap Open in app, then come back; the hub will try again by itself. Or tap Play in hub instead.";
-        return;
-      }
-      if (e.status === 403 && /premium/i.test(e.message + (e.reason || ""))) { $("spc-title").textContent = "Spotify Premium is needed to control playback"; $("spc-artist").textContent = "Use Open in app instead."; return; }
-      $("spc-title").textContent = "Couldn’t start Spotify";
-      $("spc-artist").textContent = e.code === "signed-out" ? e.message : `Spotify said: ${e.message}. Use Open in app, or tap the preset again.`;
-    }
-  }
-  // Spotify answers 502/503 when it can't reach the app (often asleep in the background).
-  // Hand playback to the device first, then ask again.
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  async function appPlayWithRetry(device, q, body) {
-    try { return await appCall("PUT", `/me/player/play${q}`, body); }
-    catch (e) {
-      if (!(e.status >= 500)) throw e;
-      $("spc-title").textContent = "Waking the Spotify app…";
-      await wait(1200);
-      await appCall("PUT", "/me/player", { device_ids: [device], play: false }).catch(() => {});
-      await wait(1500);
-      return await appCall("PUT", `/me/player/play${q}`, body);
-    }
-  }
-  function appStartPolling() {
-    clearInterval(app.poll);
-    appRefresh();
-    app.poll = setInterval(() => { if (appOn() && document.visibilityState === "visible") appRefresh(); }, 3000);
-  }
-  async function appRefresh() {
-    let st;
-    try { st = await appCall("GET", "/me/player?additional_types=episode"); } catch { return; }
-    if (!appOn()) return;
-    if (!st || !st.item) { app.playing = false; return; }
-    const it = st.item, isEp = it.type === "episode";
-    app.playing = !!st.is_playing;
-    $("spc-title").textContent = it.name;
-    $("spc-artist").textContent = isEp ? ((it.show && it.show.name) || "") : (it.artists || []).map((a) => a.name).join(", ");
-    const imgs = (isEp ? it.images : it.album && it.album.images) || [];
-    const art = (imgs[0] || {}).url;
-    if (art && $("spc-art").getAttribute("src") !== art) $("spc-art").src = art;
-    $("spc-bar").style.width = `${Math.min(100, (st.progress_ms / (it.duration_ms || 1)) * 100)}%`;
-    $("spc-pos").textContent = mmss(st.progress_ms); $("spc-dur").textContent = mmss(it.duration_ms);
-    $("np-sub").textContent = `${it.name} — ${$("spc-artist").textContent}${st.is_playing ? "" : " (paused)"}`;
-    if (st.device && st.device.id && st.device.id !== $("spc-device").value) appDevices().catch(() => {});
-  }
-  async function appControl(method, path) {
-    const dev = load(SP_DEVICE, "");
-    const sep = path.includes("?") ? "&" : "?";
-    try { await appCall(method, dev ? `${path}${sep}device_id=${encodeURIComponent(dev)}` : path); }
-    catch (e) { if (e.status === 404) noDevice(); else note(`Spotify said: ${e.message}`); }
-    setTimeout(appRefresh, 600);
-  }
-  $("spc-device").addEventListener("focus", () => { appDevices().catch(() => {}); });
-  $("spc-device").addEventListener("change", async () => {
-    const id = $("spc-device").value;
-    if (!id) return;
-    save(SP_DEVICE, id);
-    try { await appCall("PUT", "/me/player", { device_ids: [id], play: true }); setTimeout(appRefresh, 800); }
-    catch (e) { note(`Couldn’t move playback: ${e.message}`); }
-  });
-
-  /* ---------- Spotify search ---------- */
-  // Spotify's Web API with the Authorization Code + PKCE flow: only the (public) Client ID is stored,
-  // never a secret. Tokens stay on this iPad. Results play in the Spotify player like presets.
-  // user-read-private lets search use the account's country; user-library-read reads Liked Songs;
-  // the two playback scopes let the hub start and control playback in the Spotify app.
-  // Tokens issued without every scope here are dropped, which sends the viewer back to Connect.
-  const SP_SCOPE = "user-read-private user-library-read user-read-playback-state user-modify-playback-state";
-  const hasScopes = (tok) => SP_SCOPE.split(" ").every((sc) => ((tok && tok.scope) || "").split(" ").includes(sc));
-  const SP_CLIENT = "music-hub:sp-client", SP_TOKEN = "music-hub:sp-token", SP_VERIFIER = "music-hub:sp-verifier", SP_TYPE = "music-hub:sp-type";
-  const REDIRECT = location.origin + location.pathname;
-  const S_TYPES = [["all", "All"], ["track", "Songs"], ["artist", "Artists"], ["album", "Albums"], ["playlist", "Playlists"], ["show", "Podcasts"]];
-  const S_LABEL = { track: "Songs", artist: "Artists", album: "Albums", playlist: "Playlists", show: "Podcasts", episode: "Episodes" };
-  let sType = load(SP_TYPE, "all"), sLastQuery = "", sTimer = null, sSeq = 0;
-
-  const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  function randomString(n) { const a = new Uint8Array(n); crypto.getRandomValues(a); return b64url(a).slice(0, n); }
-  async function connectSpotify() {
-    const id = $("s-client").value.trim();
-    if (!/^[0-9a-f]{32}$/i.test(id)) return sErr("That doesn’t look like a Client ID. It’s 32 letters and numbers, from the app’s Settings page.");
-    save(SP_CLIENT, id);
-    const verifier = randomString(64);
-    save(SP_VERIFIER, verifier);
-    const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
-    const q = new URLSearchParams({ client_id: id, response_type: "code", redirect_uri: REDIRECT, scope: SP_SCOPE, code_challenge_method: "S256", code_challenge: challenge });
-    location.href = `https://accounts.spotify.com/authorize?${q}`;
-  }
-  async function tokenRequest(body) {
-    const res = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(body),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(j.error_description || j.error || `HTTP ${res.status}`);
-    const old = load(SP_TOKEN, {}) || {};
-    const tok = { access: j.access_token, refresh: j.refresh_token || old.refresh, expires: Date.now() + (j.expires_in - 60) * 1000, scope: j.scope ?? old.scope ?? SP_SCOPE };
-    save(SP_TOKEN, tok);
-    return tok;
-  }
-  // Back from Spotify's sign-in page: swap the code for tokens, then tidy the address.
-  async function finishSignIn() {
-    const qs = new URLSearchParams(location.search);
-    if (!qs.has("code") && !qs.has("error")) return;
-    history.replaceState(null, "", REDIRECT);
-    if (qs.get("error")) { openSearch(); sErr(qs.get("error") === "access_denied" ? "Spotify sign-in was cancelled." : `Spotify sign-in failed: ${qs.get("error")}`); return; }
-    try {
-      await tokenRequest({ grant_type: "authorization_code", code: qs.get("code"), redirect_uri: REDIRECT, client_id: load(SP_CLIENT, ""), code_verifier: load(SP_VERIFIER, "") });
-      openSearch();
-    } catch (e) { openSearch(); sErr(`Couldn’t finish connecting Spotify (${e.message}). Check the Redirect URI matches exactly, then try again.`); }
-  }
-  async function accessToken() {
-    const tok = load(SP_TOKEN, null);
-    if (!tok || !tok.refresh) return null;
-    if (!hasScopes(tok)) { save(SP_TOKEN, null); return null; }
-    if (tok.access && Date.now() < tok.expires) return tok.access;
-    try { return (await tokenRequest({ grant_type: "refresh_token", refresh_token: tok.refresh, client_id: load(SP_CLIENT, "") })).access; }
-    catch { save(SP_TOKEN, null); return null; }
-  }
-  async function spotifySearch(q, type) {
-    let token = await accessToken();
-    if (!token) { renderSearchSheet(); throw new Error("signed-out"); }
-    const types = type === "all" ? "track,artist,album,playlist,show" : type;
-    const url = `https://api.spotify.com/v1/search?${new URLSearchParams({ q, type: types, limit: type === "all" ? "5" : "10", market: "from_token" })}`;
-    let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (res.status === 401) {   // token expired early: refresh once
-      const tok = load(SP_TOKEN, {}) || {}; tok.expires = 0; save(SP_TOKEN, tok);
-      token = await accessToken();
-      if (!token) { renderSearchSheet(); throw new Error("signed-out"); }
-      res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    }
-    if (res.status === 429) throw new Error("Spotify says too many searches. Wait a minute and try again.");
-    if (!res.ok) {
-      const why = await res.json().then((j) => (j.error && j.error.message) || "", () => "");
-      if (res.status === 403 && /scope/i.test(why)) { save(SP_TOKEN, null); renderSearchSheet(); throw new Error("Spotify needs one more permission. Tap Connect Spotify to sign in again."); }
-      if (res.status === 403) throw new Error(`Spotify refused the search${why ? ` (“${why}”)` : ""}. Spotify’s developer apps now need the app owner to have Spotify Premium, and your account must be listed under the app’s User Management. After fixing either, tap Disconnect Spotify and connect again.`);
-      throw new Error(`Spotify search failed (HTTP ${res.status}${why ? `: ${why}` : ""}).`);
-    }
-    return res.json();
-  }
-
-  function sErr(msg) { const e = $("s-err"); e.textContent = msg || ""; e.hidden = !msg; }
-  function renderSearchSheet() {
-    const t0 = load(SP_TOKEN, null) || {}, connected = !!t0.refresh && hasScopes(t0);
-    $("s-setup").hidden = connected;
-    ["s-row", "s-types", "s-results", "s-actions"].forEach((id) => { $(id).hidden = !connected; });
-    $("s-redirect").textContent = REDIRECT;
-    $("s-client").value = load(SP_CLIENT, "");
-    const types = $("s-types"); types.textContent = "";
-    S_TYPES.forEach(([k, label]) => {
-      const b = el("button", null, label); b.type = "button";
-      b.setAttribute("aria-pressed", String(sType === k));
-      b.addEventListener("click", () => { sType = k; save(SP_TYPE, k); renderSearchSheet(); runSearch(); });
-      types.append(b);
-    });
-  }
-  function openSearch() {
-    sErr(""); renderSearchSheet(); $("search").hidden = false;
-    if (!$("s-row").hidden) { if (!$("s-results").childElementCount) searchMsg("Search for a song, artist, album, playlist or podcast."); $("s-q").focus(); }
-  }
-  function searchMsg(text) { const r = $("s-results"); r.textContent = ""; r.append(el("div", "msg", text)); }
-
-  function hitInfo(type, it) {
-    const img = (imgs) => { const list = (imgs || []).slice().sort((a, b) => (a.width || 0) - (b.width || 0)); return (list.find((i) => (i.width || 0) >= 64) || list[list.length - 1] || {}).url || ""; };
-    if (type === "track") return { title: it.name, sub: `${it.artists.map((a) => a.name).join(", ")} · ${it.album.name}`, image: img(it.album.images) };
-    if (type === "artist") return { title: it.name, sub: "Artist · plays their top songs", image: img(it.images) };
-    if (type === "album") return { title: it.name, sub: `Album · ${it.artists.map((a) => a.name).join(", ")}`, image: img(it.images) };
-    if (type === "playlist") return { title: it.name, sub: `Playlist · ${(it.owner && it.owner.display_name) || "Spotify"}`, image: img(it.images) };
-    return { title: it.name, sub: `Podcast · ${it.publisher || ""}`, image: img(it.images) };
-  }
-  function hitRow(type, it) {
-    const info = hitInfo(type, it);
-    const row = el("div", `hit ${type}`);
-    if (info.image) { const im = el("img"); im.src = info.image; im.alt = ""; im.loading = "lazy"; row.append(im); } else row.append(el("div", "ph"));
-    const txt = el("div"); txt.style.minWidth = "0";
-    txt.append(el("div", "t", info.title), el("div", "d", info.sub));
-    const btns = el("div", "b");
-    const source = type === "show" ? "podcast" : "spotify";
-    const preset = { id: `search:${it.uri}`, name: info.title, url: it.external_urls.spotify, source };
-    const playBtn = el("button", "btn on", "Play"); playBtn.type = "button";
-    playBtn.addEventListener("click", () => { $("search").hidden = true; play(preset); });
-    const saveBtn = el("button", "btn", "+ Preset"); saveBtn.type = "button";
-    const already = () => presets.some((p) => p.url === preset.url);
-    if (already()) { saveBtn.textContent = "Saved"; saveBtn.disabled = true; }
-    saveBtn.addEventListener("click", () => {
-      if (already()) return;
-      presets.push({ id: uid(), name: info.title, url: preset.url, source, color: "", icon: "", order: Math.max(0, ...presets.map((p) => p.order || 0)) + 10 });
-      persist(); render();
-      saveBtn.textContent = "Saved"; saveBtn.disabled = true;
-    });
-    btns.append(playBtn, saveBtn);
-    row.append(txt, btns);
-    return row;
-  }
-  async function runSearch() {
-    const q = $("s-q").value.trim();
-    if (q.length < 2) return;
-    sLastQuery = q;
-    const seq = ++sSeq;
-    sErr(""); searchMsg("Searching…");
-    let data;
-    try { data = await spotifySearch(q, sType); }
-    catch (e) { if (seq === sSeq) { if (e.message === "signed-out") { sErr("Spotify signed out. Connect again to search."); } else { searchMsg(""); sErr(e.message); } } return; }
-    if (seq !== sSeq) return;   // a newer search finished first
-    const r = $("s-results"); r.textContent = "";
-    const order = sType === "all" ? ["track", "artist", "album", "playlist", "show"] : [sType];
-    let count = 0;
-    order.forEach((type) => {
-      const items = ((data[`${type}s`] || {}).items || []).filter(Boolean);   // Spotify sometimes returns null playlists
-      if (!items.length) return;
-      if (sType === "all") r.append(el("h4", null, S_LABEL[type]));
-      items.forEach((it) => r.append(hitRow(type, it)));
-      count += items.length;
-    });
-    if (!count) searchMsg(`Nothing found for “${q}”.`);
-  }
-
-  $("search-open").addEventListener("click", openSearch);
-  $("s-close").addEventListener("click", () => { $("search").hidden = true; });
-  $("s-close-setup").addEventListener("click", () => { $("search").hidden = true; });
-  $("search").addEventListener("click", (e) => { if (e.target === $("search")) $("search").hidden = true; });
-  $("s-connect").addEventListener("click", () => { sErr(""); connectSpotify(); });
-  $("s-copy-redirect").addEventListener("click", () => { navigator.clipboard.writeText(REDIRECT).then(() => { $("s-copy-redirect").textContent = "Copied"; }, () => {}); });
-  $("s-disconnect").addEventListener("click", () => { save(SP_TOKEN, null); $("s-results").textContent = ""; renderSearchSheet(); });
-  $("search-form").addEventListener("submit", (e) => { e.preventDefault(); clearTimeout(sTimer); runSearch(); $("s-q").blur(); });
-  $("s-q").addEventListener("input", () => { clearTimeout(sTimer); if ($("s-q").value.trim() !== sLastQuery) sTimer = setTimeout(runSearch, 600); });
-  finishSignIn();
 
   /* ---------- keep the screen awake ---------- */
   async function wake() { try { if ("wakeLock" in navigator && document.visibilityState === "visible") await navigator.wakeLock.request("screen"); } catch {} }

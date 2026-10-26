@@ -4,4 +4,4 @@ Wall display page for an iPad. This repository holds only the page code; no pers
 
 ## Music hub
 
-`music.html` is a music page for a second iPad. Preset buttons play YouTube playlists, Spotify and Apple Podcasts in a player panel on the page, so the hub stays on screen. Presets are saved only on the device (Backup lets you copy or restore them).
+`music.html` is a music page for a second iPad. Preset buttons play YouTube playlists and videos in a player panel on the page, so the hub stays on screen. Presets are saved only on the device (Backup lets you copy or restore them).
