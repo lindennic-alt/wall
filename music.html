@@ -399,10 +399,12 @@ body {
     const mount = el("div"); mount.id = "yt"; host.append(mount);
     const vars = { playsinline: 1, rel: 0, modestbranding: 1 };
     if (target && target.list) Object.assign(vars, { autoplay: 1, listType: "playlist", list: target.list });
+    const opts = { width: "100%", height: "100%", playerVars: vars };
+    if (target && !target.list) opts.videoId = target.video;
+    const made = Date.now();
+    setTimeout(() => { if (!ytReady && Date.now() - made >= 10000) note("YouTube’s player didn’t finish loading. Check that youtube.com opens in Safari on this iPad."); }, 10000);
     yt = new YT.Player("yt", {
-      width: "100%", height: "100%",
-      videoId: target && !target.list ? target.video : undefined,
-      playerVars: vars,
+      ...opts,
       events: {
         onReady: () => {
           ytReady = true;
@@ -433,6 +435,7 @@ body {
   function loadScript(src) { const s = document.createElement("script"); s.src = src; s.async = true; document.head.append(s); }
   loadScript("https://www.youtube.com/iframe_api");
   loadScript("https://open.spotify.com/embed/iframe-api/v1");
+  setTimeout(() => { if (!ytApi && playing && playing.kind === "youtube") note("YouTube’s player script didn’t load. Tap Reset to try again."); }, 10000);
 
   function note(msg) { $("np-note").textContent = msg; $("np-note").hidden = !msg; }
   function show(which) {
@@ -520,7 +523,7 @@ body {
     yt.getPlayerState() === YT.PlayerState.PLAYING ? yt.pauseVideo() : yt.playVideo();
   });
   $("c-reset").addEventListener("click", () => {
-    if (!ytApi) return;
+    if (!ytApi) { loadScript("https://www.youtube.com/iframe_api"); note("Loading YouTube’s player again…"); return; }
     makeYouTube(playing && playing.kind === "youtube" ? playing.target : null);
     note("Player reset. Tap play in the video if it doesn’t start.");
   });
