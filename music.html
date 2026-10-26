@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Music">
+<title>Music Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: a hi-fi receiver's front panel. Amber display strip on top; below it the
+   preset buttons on the left and the player panel on the right (stacked in portrait).
+   Tapping a preset plays it in the panel, so the hub never leaves the screen. */
+:root {
+  --bg: #121110; --panel: #1c1a18; --raise: #26231f; --line: #34302b;
+  --ink: #f1ebe1; --muted: #9a9084; --amber: #ffb547;
+  --spotify: #4fbf7a; --podcast: #a984f0; --youtube: #ff5d50; --danger: #ff6b5e;
+  --font-body: "Figtree", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body);
+  font-size: clamp(14px, 1.5vw, 18px); line-height: 1.3; overflow: hidden;
+  -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+.hub {
+  height: 100%; display: grid; gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 42%);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas: "display display" "bar player" "presets player";
+  padding-block: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-bottom));
+  padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right));
+}
+@media (max-aspect-ratio: 1/1) {
+  .hub { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-areas: "display" "player" "bar" "presets"; }
+}
+
+/* ---------- display strip ---------- */
+.display {
+  grid-area: display; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  background: #0b0a09; border: 1px solid var(--line); border-radius: 14px; padding: 12px 20px;
+  font-family: var(--font-mono); color: var(--amber);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--amber) 45%, transparent);
+}
+.now { min-width: 0; display: grid; gap: 2px; }
+.lab { font-size: .7em; letter-spacing: .16em; text-transform: uppercase; color: color-mix(in srgb, var(--amber) 60%, var(--bg)); }
+.now .val { font-size: 1.3em; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clock { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
+.clock small { font-size: .38em; margin-left: .35em; color: color-mix(in srgb, var(--amber) 60%, var(--bg)); }
+
+/* ---------- source selector ---------- */
+.bar { grid-area: bar; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.sources { display: flex; gap: 4px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
+.src { font: 700 .92em var(--font-body); color: var(--muted); background: transparent; border: 0; border-radius: 999px;
+  padding: .55em 1em; cursor: pointer; display: inline-flex; align-items: center; gap: .5em; }
+.src .dot { width: .6em; height: .6em; border-radius: 50%; background: var(--c, var(--muted)); }
+.src[aria-pressed="true"] { background: var(--raise); color: var(--ink); }
+.bar .tools { display: flex; gap: 6px; margin-left: auto; }
+.btn { font: 600 .85em var(--font-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: .6em .9em; cursor: pointer; text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: .4em; }
+.btn.on { background: var(--amber); border-color: var(--amber); color: #1a1205; }
+.btn:disabled { opacity: .35; cursor: default; }
+.btn:focus-visible, .src:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+
+/* ---------- presets ---------- */
+.presets { grid-area: presets; overflow-y: auto; -webkit-overflow-scrolling: touch; display: grid; align-content: start; gap: 10px; padding-bottom: 8px; min-width: 0; }
+.group { display: grid; gap: 10px; }
+.group h2 { margin: 4px 2px 0; font: 600 .72em var(--font-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: .6em; }
+.group h2::before { content: ""; width: .6em; height: .6em; border-radius: 50%; background: var(--c); }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
+.preset {
+  position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 14px;
+  min-height: 118px; padding: 12px 14px 14px; border-radius: 16px; color: var(--ink);
+  background: color-mix(in srgb, var(--c) 22%, var(--panel)); border: 1px solid color-mix(in srgb, var(--c) 35%, var(--line));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent), 0 3px 0 #0006;
+  transition: transform .1s ease, box-shadow .1s ease, filter .1s ease;
+  font: inherit; text-align: left; cursor: pointer; width: 100%;
+}
+.preset:active { transform: translateY(2px); box-shadow: 0 1px 0 #0006; filter: brightness(1.15); }
+.preset:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+.preset .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: .7em; letter-spacing: .1em; text-transform: uppercase; }
+.preset .num { color: var(--c); font-weight: 600; }
+.preset .tag { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.preset .name { font-weight: 800; font-size: clamp(1.05rem, 2vw, 1.5rem); line-height: 1.08; overflow-wrap: anywhere; display: flex; gap: .4em; align-items: baseline; }
+.preset.playing { border-color: var(--amber); box-shadow: 0 0 0 2px var(--amber), 0 3px 0 #0006; }
+.preset.playing .tag { color: var(--amber); }
+.preset.add { background: transparent; border: 1.5px dashed var(--line); box-shadow: none; color: var(--muted); align-items: center; justify-content: center; font-weight: 700; }
+.edit-tools { display: flex; gap: 6px; }
+.edit-tools button { font: 600 .8em var(--font-mono); color: var(--ink); background: #0005; border: 1px solid var(--line); border-radius: 8px; padding: .4em .7em; cursor: pointer; }
+.edit-tools button:disabled { opacity: .3; cursor: default; }
+.empty { border: 1.5px dashed var(--line); border-radius: 16px; padding: 24px 20px; color: var(--muted); display: grid; gap: 10px; justify-items: start; }
+.empty b { color: var(--ink); font-size: 1.15em; }
+
+/* ---------- player ---------- */
+.player { grid-area: player; display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
+.screen { position: relative; flex: 1 1 auto; min-height: 180px; border-radius: 10px; overflow: hidden; background: #000; }
+@media (max-aspect-ratio: 1/1) { .screen { flex: none; aspect-ratio: 16 / 9; max-height: 34vh; min-height: 0; width: 100%; } }
+.screen > div, .screen iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.idle { display: grid; place-items: center; text-align: center; color: var(--muted); padding: 20px; font-size: .95em; }
+.idle b { display: block; color: var(--ink); font-size: 1.2em; margin-bottom: 4px; }
+.np { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.np .txt { min-width: 0; flex: 1; }
+.np .title { font-weight: 800; font-size: 1.1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np .sub { color: var(--muted); font-size: .85em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.controls .btn { flex: 1 1 auto; min-height: 48px; font-size: 1em; }
+.note { color: var(--muted); font-size: .8em; margin: 0; }
+
+/* ---------- sheets ---------- */
+.sheet { position: fixed; inset: 0; z-index: 20; background: #000a; display: grid; place-items: center; overflow: auto;
+  padding-block: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-bottom));
+  padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+.sheet form { width: min(540px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 20px; display: grid; gap: 14px; -webkit-user-select: text; user-select: text; }
+.sheet h3 { margin: 0; font-size: 1.3em; }
+.sheet label { display: grid; gap: 6px; font-size: .85em; color: var(--muted); }
+.sheet input, .sheet select, .sheet textarea { font: 500 1rem var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: .7em .8em; min-width: 0; width: 100%; }
+.sheet textarea { font: 400 .8rem var(--font-mono); min-height: 160px; resize: vertical; }
+.sheet input:focus-visible, .sheet select:focus-visible, .sheet textarea:focus-visible, .sheet button:focus-visible { outline: 3px solid var(--amber); outline-offset: 1px; }
+.sheet .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sheet .hint { font-size: .8em; color: var(--muted); margin: -6px 0 0; }
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatches button { width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent; background: var(--c); cursor: pointer; }
+.swatches button[aria-pressed="true"] { border-color: var(--ink); box-shadow: 0 0 0 2px var(--bg) inset; }
+.sheet .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.sheet .actions .spacer { flex: 1; }
+.btn.danger { color: var(--danger); }
+.btn.danger.armed { background: var(--danger); border-color: var(--danger); color: #1a0705; }
+.err { color: var(--danger); font-size: .85em; margin: 0; }
+.ok { color: var(--spotify); font-size: .85em; margin: 0; }
+@media (prefers-reduced-motion: reduce) { .preset { transition: none; } }
+</style>
+</head>
+<body>
+<div class="hub">
+  <header class="display">
+    <div class="now">
+      <span class="lab" id="now-lab">Ready</span>
+      <span class="val" id="now-val">Pick a preset</span>
+    </div>
+    <div class="clock" id="clock">--:--</div>
+  </header>
+
+  <nav class="bar" aria-label="Sources">
+    <div class="sources" id="sources"></div>
+    <div class="tools">
+      <button class="btn" type="button" id="backup-open">Backup</button>
+      <button class="btn" type="button" id="edit-toggle">Edit</button>
+    </div>
+  </nav>
+
+  <main class="presets" id="presets" aria-live="polite"></main>
+
+  <section class="player" aria-label="Player">
+    <div class="screen" id="screen">
+      <div class="idle" id="idle"><div><b>Nothing playing</b>Tap a preset and it plays here.</div></div>
+      <div id="yt-host" hidden><div id="yt"></div></div>
+      <div id="sp-host" hidden><div id="sp"></div></div>
+      <iframe id="pod" title="Podcast player" hidden allow="autoplay *; encrypted-media *; clipboard-write" sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation"></iframe>
+    </div>
+    <div class="np">
+      <div class="txt">
+        <div class="title" id="np-title">—</div>
+        <div class="sub" id="np-sub">Player is idle</div>
+      </div>
+      <a class="btn" id="np-open" href="#" target="_blank" rel="noopener" hidden>Open in app</a>
+    </div>
+    <div class="controls" id="yt-controls" hidden>
+      <button class="btn" type="button" id="c-prev" aria-label="Previous">⏮</button>
+      <button class="btn" type="button" id="c-play" aria-label="Play or pause">⏯</button>
+      <button class="btn" type="button" id="c-next" aria-label="Next">⏭</button>
+      <button class="btn" type="button" id="c-shuffle" aria-pressed="false">Shuffle</button>
+    </div>
+    <p class="note" id="np-note" hidden></p>
+  </section>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <form id="form" novalidate>
+    <h3 id="form-title">Add preset</h3>
+    <label for="f-url">Link
+      <input id="f-url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste a Spotify, podcast or YouTube link"></label>
+    <p class="hint">In the app, use Share › Copy Link, then paste it here.</p>
+    <label for="f-name">Name on the button
+      <input id="f-name" autocomplete="off" placeholder="Sunday jazz"></label>
+    <div class="row">
+      <label for="f-source">Source
+        <select id="f-source">
+          <option value="spotify">Spotify</option>
+          <option value="podcast">Podcast</option>
+          <option value="youtube">YouTube</option>
+        </select></label>
+      <label for="f-icon">Icon (optional)
+        <input id="f-icon" autocomplete="off" maxlength="4" placeholder="🎷"></label>
+    </div>
+    <div>
+      <label>Colour</label>
+      <div class="swatches" id="swatches" role="group" aria-label="Colour"></div>
+    </div>
+    <p class="err" id="form-err" hidden></p>
+    <div class="actions">
+      <button class="btn danger" type="button" id="f-delete">Delete</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" id="f-cancel">Cancel</button>
+      <button class="btn on" type="submit">Save</button>
+    </div>
+  </form>
+</div>
+
+<div class="sheet" id="backup" hidden>
+  <form id="backup-form" novalidate>
+    <h3>Backup and restore</h3>
+    <p class="hint" style="margin:0">Presets are saved only on this iPad. Copy this text somewhere safe, or paste a list here to replace the presets.</p>
+    <label for="b-text">Preset list
+      <textarea id="b-text" spellcheck="false" autocapitalize="off"></textarea></label>
+    <p class="err" id="b-err" hidden></p>
+    <p class="ok" id="b-ok" hidden></p>
+    <div class="actions">
+      <button class="btn" type="button" id="b-copy">Copy</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" id="b-close">Close</button>
+      <button class="btn on" type="submit">Replace presets</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const SOURCES = {
+    spotify: { label: "Spotify", color: "var(--spotify)" },
+    podcast: { label: "Podcasts", color: "var(--podcast)" },
+    youtube: { label: "YouTube", color: "var(--youtube)" },
+  };
+  const SWATCHES = ["", "#9cc4f2", "#f2b441", "#c9a27a", "#f08a6c", "#7fd1b9", "#c3a7ee", "#e7e07a"];
+  const KEY = "music-hub:presets", FILTER_KEY = "music-hub:filter", SHUFFLE_KEY = "music-hub:shuffle";
+
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const pad = (n) => String(n).padStart(2, "0");
+  const load = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
+  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+  const uid = () => Math.random().toString(36).slice(2, 10);
+
+  let presets = load(KEY, []);
+  let filter = load(FILTER_KEY, "all");
+  let shuffle = load(SHUFFLE_KEY, false);
+  let editing = false, playing = null;
+
+  const persist = () => save(KEY, presets);
+  const sorted = () => presets.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  function detectSource(url) {
+    const u = url.toLowerCase();
+    if (/youtube\.com|youtu\.be/.test(u)) return "youtube";
+    if (/open\.spotify\.com\/(show|episode)\//.test(u)) return "podcast";
+    if (/spotify/.test(u)) return "spotify";
+    if (/podcasts\.apple|pca\.st|overcast\.fm|pocketcasts|castro\.fm/.test(u)) return "podcast";
+    return null;
+  }
+
+  /* ---------- what each link plays as ---------- */
+  // -> { kind: "youtube", list, video } | { kind: "spotify", uri } | { kind: "apple", src } | { kind: "link" }
+  function playable(url) {
+    let u; try { u = new URL(url); } catch { return { kind: "link" }; }
+    const host = u.hostname.replace(/^www\.|^m\.|^music\./, "");
+    if (host === "youtube.com" || host === "youtu.be") {
+      const list = u.searchParams.get("list");
+      const video = host === "youtu.be" ? u.pathname.slice(1) : u.searchParams.get("v");
+      if (list || video) return { kind: "youtube", list, video };
+    }
+    if (host === "open.spotify.com") {
+      const m = u.pathname.match(/\/(playlist|album|artist|track|show|episode)\/([A-Za-z0-9]+)/);
+      if (m) return { kind: "spotify", uri: `spotify:${m[1]}:${m[2]}` };
+    }
+    if (u.protocol === "spotify:") return { kind: "spotify", uri: url };
+    if (host === "podcasts.apple.com") return { kind: "apple", src: `https://embed.podcasts.apple.com${u.pathname}${u.search}` };
+    return { kind: "link" };
+  }
+
+  /* ---------- clock + display ---------- */
+  function renderClock() {
+    const d = new Date(), h = d.getHours(), c = $("clock");
+    c.textContent = `${(h % 12) || 12}:${pad(d.getMinutes())}`;
+    c.append(el("small", null, h < 12 ? "AM" : "PM"));
+  }
+  function renderDisplay() {
+    if (!playing) { $("now-lab").textContent = "Ready"; $("now-val").textContent = "Pick a preset"; return; }
+    $("now-lab").textContent = `Now playing · ${SOURCES[playing.source]?.label || ""}`;
+    $("now-val").textContent = `▶ ${playing.name}`;
+  }
+
+  /* ---------- source selector ---------- */
+  function renderSources() {
+    const box = $("sources"); box.textContent = "";
+    const counts = { all: presets.length };
+    presets.forEach((p) => { counts[p.source] = (counts[p.source] || 0) + 1; });
+    [["all", "All", "var(--amber)"], ...Object.entries(SOURCES).map(([k, s]) => [k, s.label, s.color])].forEach(([key, label, color]) => {
+      const b = el("button", "src"); b.type = "button";
+      b.style.setProperty("--c", color);
+      b.setAttribute("aria-pressed", String(filter === key));
+      b.append(el("span", "dot"), `${label}${counts[key] ? ` ${counts[key]}` : ""}`);
+      b.addEventListener("click", () => { filter = key; save(FILTER_KEY, filter); render(); });
+      box.append(b);
+    });
+  }
+
+  /* ---------- presets ---------- */
+  function presetTile(p, n, list) {
+    const color = p.color || SOURCES[p.source]?.color || "var(--amber)";
+    const t = el(editing ? "div" : "button", "preset" + (playing && playing.id === p.id ? " playing" : ""));
+    t.style.setProperty("--c", color);
+    const top = el("div", "top");
+    top.append(el("span", "num", `P${pad(n)}`), el("span", "tag", playing && playing.id === p.id ? "Playing" : SOURCES[p.source]?.label || "Link"));
+    const name = el("div", "name");
+    if (p.icon) name.append(el("span", null, p.icon));
+    name.append(el("span", null, p.name));
+    t.append(top, name);
+    if (editing) {
+      t.addEventListener("click", () => openSheet(p));
+      const tools = el("div", "edit-tools"), i = list.indexOf(p);
+      const ed = el("button", null, "Edit"), up = el("button", null, "◀"), down = el("button", null, "▶");
+      ed.type = up.type = down.type = "button";
+      up.setAttribute("aria-label", `Move ${p.name} earlier`); down.setAttribute("aria-label", `Move ${p.name} later`);
+      up.disabled = i === 0; down.disabled = i === list.length - 1;
+      up.addEventListener("click", (e) => { e.stopPropagation(); move(list, i, -1); });
+      down.addEventListener("click", (e) => { e.stopPropagation(); move(list, i, 1); });
+      tools.append(ed, up, down); t.append(tools);
+    } else {
+      t.type = "button";
+      t.addEventListener("click", () => play(p));
+    }
+    return t;
+  }
+  function renderPresets() {
+    const box = $("presets"); box.textContent = "";
+    const all = sorted();
+    const numbers = new Map(Object.keys(SOURCES).flatMap((k) => all.filter((p) => p.source === k)).map((p, i) => [p.id, i + 1]));
+    const groups = filter === "all" ? Object.keys(SOURCES) : [filter];
+    let shown = 0;
+    groups.forEach((key) => {
+      const list = all.filter((p) => p.source === key);
+      if (!list.length && !editing) return;
+      const g = el("section", "group"), h = el("h2", null, SOURCES[key].label), grid = el("div", "grid");
+      h.style.setProperty("--c", SOURCES[key].color);
+      list.forEach((p) => grid.append(presetTile(p, numbers.get(p.id), list)));
+      if (editing) {
+        const add = el("button", "preset add", `+ Add ${key === "podcast" ? "podcast" : SOURCES[key].label + " link"}`);
+        add.type = "button"; add.addEventListener("click", () => openSheet(null, key));
+        grid.append(add);
+      }
+      g.append(h, grid); box.append(g); shown += list.length;
+    });
+    if (!shown && !editing) {
+      const d = el("div", "empty");
+      d.append(el("b", null, presets.length ? `No ${SOURCES[filter].label} presets yet.` : "No presets on this iPad yet."),
+        el("span", null, "Tap Edit to paste a link from Spotify, Podcasts or YouTube, or restore a saved list from Backup."));
+      const b = el("button", "btn on", "Add a preset"); b.type = "button";
+      b.addEventListener("click", () => { editing = true; render(); openSheet(null); });
+      d.append(b); box.append(d);
+    }
+  }
+  function render() {
+    renderDisplay(); renderSources(); renderPresets();
+    const e = $("edit-toggle"); e.textContent = editing ? "Done" : "Edit"; e.classList.toggle("on", editing);
+  }
+  $("edit-toggle").addEventListener("click", () => { editing = !editing; render(); });
+
+  function move(list, i, dir) {
+    const a = list[i], b = list[i + dir];
+    if (!a || !b) return;
+    const all = sorted(), ai = all.indexOf(a), bi = all.indexOf(b);
+    [all[ai], all[bi]] = [all[bi], all[ai]];
+    all.forEach((p, n) => { p.order = (n + 1) * 10; });
+    persist(); render();
+  }
+
+  /* ---------- player ---------- */
+  let yt = null, ytReady = false, ytPending = null;
+  let sp = null, spReady = false, spPending = null;
+
+  window.onYouTubeIframeAPIReady = () => {
+    yt = new YT.Player("yt", {
+      width: "100%", height: "100%",
+      playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+      events: {
+        onReady: () => { ytReady = true; if (ytPending) { const p = ytPending; ytPending = null; startYouTube(p); } },
+        onStateChange: (e) => {
+          if (e.data === YT.PlayerState.PLAYING) {
+            const d = yt.getVideoData && yt.getVideoData();
+            if (d && d.title) $("np-sub").textContent = d.title;
+            note("");
+          }
+          if (e.data === YT.PlayerState.CUED && playing && playing.kind === "youtube") yt.playVideo();
+        },
+        // 101/150: the uploader blocked embedding; 100: removed. Skip to the next video in the list.
+        onError: (e) => {
+          if (playing && playing.target.list && [100, 101, 150].includes(e.data)) { note("Skipped a video that can’t play outside YouTube."); yt.nextVideo(); }
+          else note("This video can’t play here. Use Open in app.");
+        },
+      },
+    });
+  };
+  // The Spotify controller needs a first item, so it is created on the first Spotify tap.
+  let spApi = null;
+  window.onSpotifyIframeApiReady = (api) => { spApi = api; if (spPending) { const p = spPending; spPending = null; startSpotify(p); } };
+  function loadScript(src) { const s = document.createElement("script"); s.src = src; s.async = true; document.head.append(s); }
+  loadScript("https://www.youtube.com/iframe_api");
+  loadScript("https://open.spotify.com/embed/iframe-api/v1");
+
+  function note(msg) { $("np-note").textContent = msg; $("np-note").hidden = !msg; }
+  function show(which) {
+    $("idle").hidden = which !== "idle";
+    $("yt-host").hidden = which !== "youtube";
+    $("sp-host").hidden = which !== "spotify";
+    $("pod").hidden = which !== "apple";
+    $("yt-controls").hidden = which !== "youtube";
+  }
+  function stopOthers(kind) {
+    if (kind !== "youtube" && ytReady) { try { yt.pauseVideo(); } catch {} }
+    if (kind !== "spotify" && spReady) { try { sp.pause(); } catch {} }
+    if (kind !== "apple" && $("pod").getAttribute("src")) $("pod").removeAttribute("src");
+  }
+  function startYouTube(p) {
+    const t = p.target;
+    if (t.list) {
+      yt.loadPlaylist({ list: t.list, listType: "playlist", index: 0 });
+      // setShuffle only takes effect once the list has loaded
+      setTimeout(() => { try { yt.setShuffle(shuffle); if (shuffle) yt.playVideoAt(0); } catch {} }, 1200);
+    } else yt.loadVideoById(t.video);
+  }
+  function startSpotify(p) {
+    if (sp) { sp.loadUri(p.target.uri); sp.play(); return; }
+    spApi.createController($("sp"), { width: "100%", height: "100%", uri: p.target.uri }, (c) => {
+      sp = c; spReady = true;
+      sp.addListener("ready", () => { if (playing && playing.kind === "spotify") sp.play(); });
+    });
+  }
+
+  function play(p) {
+    const target = playable(p.url);
+    playing = { ...p, kind: target.kind, target };
+    stopOthers(target.kind);
+    note("");
+    $("np-title").textContent = p.name;
+    $("np-sub").textContent = SOURCES[p.source]?.label || "";
+    const open = $("np-open"); open.href = p.url; open.hidden = false;
+    if (target.kind === "youtube") {
+      show("youtube");
+      if (ytReady) startYouTube(playing); else { ytPending = playing; $("np-sub").textContent = "Loading the YouTube player…"; }
+    } else if (target.kind === "spotify") {
+      show("spotify");
+      note("If Spotify only plays 30-second previews, log in at open.spotify.com in Safari on this iPad, or use Open in app.");
+      if (spApi) startSpotify(playing); else { spPending = playing; $("np-sub").textContent = "Loading the Spotify player…"; }
+    } else if (target.kind === "apple") {
+      show("apple");
+      $("pod").src = target.src;
+      note("Pick an episode in the player, then press play.");
+    } else {
+      show("idle");
+      $("idle").firstElementChild.innerHTML = "";
+      $("idle").firstElementChild.append(el("b", null, "This link can’t play inside the hub"), "Use Open in app.");
+      if (/open\.spotify\.com\/collection/.test(p.url)) note("Spotify doesn’t allow Liked Songs in embedded players. Save them to a playlist to play them here.");
+    }
+    render();
+  }
+
+  $("c-prev").addEventListener("click", () => { if (ytReady) yt.previousVideo(); });
+  $("c-next").addEventListener("click", () => { if (ytReady) yt.nextVideo(); });
+  $("c-play").addEventListener("click", () => {
+    if (!ytReady) return;
+    yt.getPlayerState() === YT.PlayerState.PLAYING ? yt.pauseVideo() : yt.playVideo();
+  });
+  function renderShuffle() { const b = $("c-shuffle"); b.setAttribute("aria-pressed", String(shuffle)); b.classList.toggle("on", shuffle); }
+  $("c-shuffle").addEventListener("click", () => {
+    shuffle = !shuffle; save(SHUFFLE_KEY, shuffle); renderShuffle();
+    if (ytReady) { try { yt.setShuffle(shuffle); } catch {} }
+  });
+
+  /* ---------- editor ---------- */
+  let current = null, pickedColor = "", deleteArmed = false;
+  function renderSwatches() {
+    const box = $("swatches"); box.textContent = "";
+    const src = $("f-source").value;
+    SWATCHES.forEach((c) => {
+      const b = el("button"); b.type = "button";
+      b.style.setProperty("--c", c || SOURCES[src].color);
+      b.setAttribute("aria-label", c ? `Colour ${c}` : "Source colour");
+      b.setAttribute("aria-pressed", String(pickedColor === c));
+      b.addEventListener("click", () => { pickedColor = c; renderSwatches(); });
+      box.append(b);
+    });
+  }
+  function openSheet(p, source) {
+    current = p; deleteArmed = false;
+    $("form-title").textContent = p ? "Edit preset" : "Add preset";
+    $("f-url").value = p ? p.url : "";
+    $("f-name").value = p ? p.name : "";
+    $("f-source").value = p ? p.source : (source || (filter !== "all" ? filter : "spotify"));
+    $("f-icon").value = p?.icon || "";
+    pickedColor = p?.color || "";
+    const del = $("f-delete"); del.hidden = !p; del.textContent = "Delete"; del.classList.remove("armed");
+    formError("");
+    renderSwatches();
+    $("sheet").hidden = false;
+    (p ? $("f-name") : $("f-url")).focus();
+  }
+  const closeSheet = () => { $("sheet").hidden = true; current = null; };
+  function formError(msg) { const e = $("form-err"); e.textContent = msg; e.hidden = !msg; }
+  $("f-cancel").addEventListener("click", closeSheet);
+  $("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) closeSheet(); });
+  $("f-source").addEventListener("change", renderSwatches);
+  $("f-url").addEventListener("input", () => { const s = detectSource($("f-url").value); if (s) { $("f-source").value = s; renderSwatches(); } });
+  $("form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const url = $("f-url").value.trim(), name = $("f-name").value.trim();
+    if (!/^https?:\/\//i.test(url)) return formError("Paste a full link that starts with https://");
+    if (!name) return formError("Give the button a name.");
+    const data = { name, url, source: $("f-source").value, color: pickedColor, icon: $("f-icon").value.trim() };
+    if (current) Object.assign(current, data);
+    else presets.push({ id: uid(), ...data, order: Math.max(0, ...presets.map((p) => p.order || 0)) + 10 });
+    persist(); closeSheet(); render();
+  });
+  $("f-delete").addEventListener("click", () => {
+    if (!current) return;
+    if (!deleteArmed) { deleteArmed = true; $("f-delete").textContent = "Tap again to delete"; $("f-delete").classList.add("armed"); return; }
+    presets = presets.filter((p) => p !== current);
+    persist(); closeSheet(); render();
+  });
+
+  /* ---------- backup ---------- */
+  const exportText = () => JSON.stringify(sorted().map(({ name, url, source, color, icon }) => ({ name, url, source, color, icon })), null, 1);
+  $("backup-open").addEventListener("click", () => {
+    $("b-text").value = exportText(); $("b-err").hidden = true; $("b-ok").hidden = true; $("backup").hidden = false;
+  });
+  $("b-close").addEventListener("click", () => { $("backup").hidden = true; });
+  $("backup").addEventListener("click", (e) => { if (e.target === $("backup")) $("backup").hidden = true; });
+  $("b-copy").addEventListener("click", () => {
+    const ok = () => { $("b-ok").textContent = "Copied."; $("b-ok").hidden = false; };
+    navigator.clipboard.writeText($("b-text").value).then(ok, () => { $("b-text").select(); });
+  });
+  $("backup-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    $("b-ok").hidden = true;
+    let list;
+    try { list = JSON.parse($("b-text").value); } catch { list = null; }
+    if (!Array.isArray(list) || !list.every((p) => p && typeof p.name === "string" && /^https?:\/\//.test(p.url || ""))) {
+      $("b-err").textContent = "That text isn’t a preset list. It should start with [ and contain name and url for each preset.";
+      $("b-err").hidden = false; return;
+    }
+    presets = list.map((p, i) => ({ id: uid(), name: p.name, url: p.url, source: SOURCES[p.source] ? p.source : (detectSource(p.url) || "spotify"),
+      color: p.color || "", icon: p.icon || "", order: (i + 1) * 10 }));
+    persist(); render();
+    $("b-err").hidden = true; $("b-ok").textContent = `Restored ${presets.length} presets.`; $("b-ok").hidden = false;
+  });
+
+  /* ---------- keep the screen awake ---------- */
+  async function wake() { try { if ("wakeLock" in navigator && document.visibilityState === "visible") await navigator.wakeLock.request("screen"); } catch {} }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") wake(); });
+  document.addEventListener("click", wake, { once: true });
+
+  renderClock(); renderShuffle(); show("idle"); render(); wake();
+  setInterval(renderClock, 5000);
+})();
+</script>
+</body>
+</html>
