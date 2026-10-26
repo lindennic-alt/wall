@@ -178,6 +178,7 @@ body {
       <button class="btn" type="button" id="c-play" aria-label="Play or pause">⏯</button>
       <button class="btn" type="button" id="c-next" aria-label="Next">⏭</button>
       <button class="btn" type="button" id="c-shuffle" aria-pressed="false">Shuffle</button>
+      <button class="btn" type="button" id="c-reset">Reset</button>
     </div>
     <p class="note" id="np-note" hidden></p>
   </section>
@@ -387,8 +388,9 @@ body {
   let yt = null, ytReady = false, ytPending = null;
   let sp = null, spReady = false, spPending = null;
 
-  // Switching playlists on a live player sometimes leaves the old list playing on iPad Safari,
-  // so each switch is checked after a few seconds and the player is rebuilt with the new list if needed.
+  // One YouTube player is kept for the whole session. iPad Safari only lets a player start with sound
+  // after a tap inside it, and a kept player keeps that permission; a rebuilt one loses it.
+  // Each switch is checked after a few seconds and retried once; Reset rebuilds the player by hand.
   let ytApi = false, ytSeq = 0, ytShufflePending = false;
   function makeYouTube(target) {
     if (yt) { try { yt.destroy(); } catch {} }
@@ -404,7 +406,7 @@ body {
       events: {
         onReady: () => {
           ytReady = true;
-          if (target) { try { yt.playVideo(); } catch {} }
+          if (target) { ytLoaded = target.list || target.video; try { yt.playVideo(); } catch {} }
           if (ytPending) { const p = ytPending; ytPending = null; startYouTube(p); }
         },
         onStateChange: (e) => {
@@ -447,16 +449,32 @@ body {
   }
   const ytList = () => { try { return JSON.stringify(yt.getPlaylist() || []); } catch { return "[]"; } };
   const ytVideo = () => { try { return (yt.getVideoData() || {}).video_id || ""; } catch { return ""; } };
-  function startYouTube(p) {
-    const t = p.target, seq = ++ytSeq, before = ytList();
-    ytShufflePending = shuffle && !!t.list;
-    try { yt.stopVideo(); } catch {}
+  const ytState = () => { try { return yt.getPlayerState(); } catch { return -1; } };
+  let ytLoaded = null;   // the list or video id the player last confirmed loading
+  function ytLoad(t) {
     if (t.list) yt.loadPlaylist({ list: t.list, listType: "playlist", index: 0 });
     else yt.loadVideoById(t.video);
+  }
+  function startYouTube(p) {
+    const t = p.target, want = t.list || t.video, seq = ++ytSeq, before = ytList();
+    const current = () => seq === ytSeq && playing && playing.id === p.id;   // false once another preset is tapped
+    const switched = () => (t.list ? ytList() !== "[]" && (ytList() !== before || ytLoaded === want) : ytVideo() === t.video);
+    ytShufflePending = shuffle && !!t.list;
+    try { yt.stopVideo(); } catch {}
+    ytLoad(t);
     setTimeout(() => {
-      if (seq !== ytSeq || !playing || playing.id !== p.id) return;   // another preset was tapped since
-      const switched = t.list ? ytList() !== before && ytList() !== "[]" : ytVideo() === t.video;
-      if (!switched) { $("np-sub").textContent = "Reloading the player…"; makeYouTube(t); }
+      if (!current()) return;
+      if (!switched()) { try { yt.stopVideo(); } catch {} ytLoad(t); }   // retry once
+      setTimeout(() => {
+        if (!current()) return;
+        if (!switched()) { note("The player didn’t switch. Tap Reset, then tap play in the video."); return; }
+        ytLoaded = want;
+        const st = ytState();
+        if (st !== YT.PlayerState.PLAYING && st !== YT.PlayerState.BUFFERING) {
+          try { yt.playVideo(); } catch {}
+          note("If it doesn’t start, tap play in the video.");
+        }
+      }, 3500);
     }, 3500);
   }
   function startSpotify(p) {
@@ -500,6 +518,11 @@ body {
   $("c-play").addEventListener("click", () => {
     if (!ytReady) return;
     yt.getPlayerState() === YT.PlayerState.PLAYING ? yt.pauseVideo() : yt.playVideo();
+  });
+  $("c-reset").addEventListener("click", () => {
+    if (!ytApi) return;
+    makeYouTube(playing && playing.kind === "youtube" ? playing.target : null);
+    note("Player reset. Tap play in the video if it doesn’t start.");
   });
   function renderShuffle() { const b = $("c-shuffle"); b.setAttribute("aria-pressed", String(shuffle)); b.classList.toggle("on", shuffle); }
   $("c-shuffle").addEventListener("click", () => {
