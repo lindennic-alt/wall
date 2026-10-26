@@ -155,6 +155,22 @@ body {
 .steps { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; color: var(--ink); font-size: .92em; }
 .steps code { font: 500 .85em var(--font-mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: .15em .4em; overflow-wrap: anywhere; }
 .steps a { color: var(--amber); }
+.plist { display: grid; gap: 10px; align-content: start; }
+
+/* ---------- YouTube search (in the YouTube tab) ---------- */
+.yts { display: grid; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
+.yts .s-row input { font: 500 1rem var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: .65em .8em; min-width: 0; -webkit-user-select: text; user-select: text; }
+.yts .s-row input:focus-visible, .yts input:focus-visible { outline: 3px solid var(--amber); outline-offset: 1px; }
+.yts .s-types button[aria-pressed="true"] { background: var(--youtube); border-color: var(--youtube); color: #200604; }
+.yts .s-results { max-height: none; min-height: 0; }
+.yts .hit { grid-template-columns: 96px minmax(0, 1fr) auto; }
+.yts .hit img, .yts .hit .ph { width: 96px; height: 54px; }
+.yts .setup { display: grid; gap: 10px; -webkit-user-select: text; user-select: text; }
+.yts .setup input { font: 500 1rem var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: .65em .8em; width: 100%; }
+.yts .setup label { display: grid; gap: 6px; font-size: .85em; color: var(--muted); }
+.yts .foot { display: flex; gap: 8px; justify-content: space-between; align-items: center; color: var(--muted); font-size: .8em; }
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); text-decoration: underline; cursor: pointer; }
+@media (max-width: 560px) { .hit, .yts .hit { grid-template-columns: 52px minmax(0, 1fr); } .yts .hit img, .yts .hit .ph { width: 52px; height: 52px; } .hit .b { grid-column: 1 / -1; } }
 @media (prefers-reduced-motion: reduce) { .preset { transition: none; } }
 </style>
 </head>
@@ -171,13 +187,41 @@ body {
   <nav class="bar" aria-label="Sources">
     <div class="sources" id="sources"></div>
     <div class="tools">
-      <button class="btn" type="button" id="search-open">Search</button>
+      <button class="btn" type="button" id="search-open">Search Spotify</button>
       <button class="btn" type="button" id="backup-open">Backup</button>
       <button class="btn" type="button" id="edit-toggle">Edit</button>
     </div>
   </nav>
 
-  <main class="presets" id="presets" aria-live="polite"></main>
+  <main class="presets">
+    <section class="yts" id="yts" hidden aria-label="Search YouTube">
+      <div class="setup" id="yts-setup" hidden>
+        <b>Search YouTube</b>
+        <p class="note" style="margin:0">Searching needs a free YouTube API key from Google, set up once. It allows about 100 searches a day.</p>
+        <ol class="steps">
+          <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">console.cloud.google.com</a>, sign in, and create a project named “Music Hub”.</li>
+          <li>Open <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">YouTube Data API v3</a> and tap <b>Enable</b>.</li>
+          <li>Go to <b>APIs &amp; Services › Credentials › Create credentials › API key</b>.</li>
+          <li>Edit the key. Under <b>Application restrictions</b> choose <b>Websites</b> and add <code id="yts-referrer"></code>. Under <b>API restrictions</b> choose <b>YouTube Data API v3</b>. Save.</li>
+          <li>Copy the key and paste it here.</li>
+        </ol>
+        <label for="yts-key">API key
+          <input id="yts-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Starts with AIza"></label>
+        <div class="foot"><span></span><button class="btn on" type="button" id="yts-save">Save key</button></div>
+      </div>
+      <form id="yts-form" novalidate hidden style="display:grid;gap:10px">
+        <div class="s-row">
+          <input id="yts-q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Search YouTube videos and playlists">
+          <button class="btn on" type="submit">Search</button>
+        </div>
+        <div class="s-types" id="yts-types"></div>
+      </form>
+      <div class="s-results" id="yts-results" hidden></div>
+      <p class="err" id="yts-err" hidden></p>
+      <div class="foot" id="yts-foot" hidden><span id="yts-count"></span><span style="display:flex;gap:12px"><button class="linkbtn" type="button" id="yts-clear">Clear results</button><button class="linkbtn" type="button" id="yts-change">Change API key</button></span></div>
+    </section>
+    <div class="plist" id="presets" aria-live="polite"></div>
+  </main>
 
   <section class="player" aria-label="Player">
     <div class="screen" id="screen">
@@ -422,6 +466,7 @@ body {
   function render() {
     renderDisplay(); renderSources(); renderPresets();
     const e = $("edit-toggle"); e.textContent = editing ? "Done" : "Edit"; e.classList.toggle("on", editing);
+    renderYtSearch();
   }
   $("edit-toggle").addEventListener("click", () => { editing = !editing; render(); });
 
@@ -669,6 +714,104 @@ body {
     persist(); render();
     $("b-err").hidden = true; $("b-ok").textContent = `Restored ${presets.length} presets.`; $("b-ok").hidden = false;
   });
+
+  /* ---------- YouTube search (YouTube tab) ---------- */
+  // YouTube Data API v3 with a key kept only on this iPad. Each search costs 100 of the key's
+  // 10,000 free daily units, so searches run on submit only, never while typing.
+  const YT_KEY = "music-hub:yt-key", YT_TYPE = "music-hub:yt-type";
+  const YTS_TYPES = [["video,playlist", "All"], ["video", "Videos"], ["playlist", "Playlists"]];
+  let ytsType = load(YT_TYPE, "video,playlist"), ytsKeyEdit = false, ytsSeq = 0;
+  const decode = (t) => { const x = document.createElement("textarea"); x.innerHTML = t; return x.value; };   // titles arrive HTML-escaped
+
+  function ytsErr(msg) { const e = $("yts-err"); e.textContent = msg || ""; e.hidden = !msg; }
+  function renderYtSearch() {
+    const show = filter === "youtube" && !editing;
+    $("yts").hidden = !show;
+    if (!show) return;
+    const key = load(YT_KEY, "");
+    const setup = !key || ytsKeyEdit;
+    $("yts-setup").hidden = !setup;
+    $("yts-form").hidden = setup;
+    $("yts-results").hidden = setup || !$("yts-results").childElementCount;
+    $("yts-foot").hidden = setup;
+    $("yts-referrer").textContent = `${location.origin}/*`;
+    if (setup && !$("yts-key").value) $("yts-key").value = key;
+    const types = $("yts-types"); types.textContent = "";
+    YTS_TYPES.forEach(([k, label]) => {
+      const b = el("button", null, label); b.type = "button";
+      b.setAttribute("aria-pressed", String(ytsType === k));
+      b.addEventListener("click", () => { ytsType = k; save(YT_TYPE, k); renderYtSearch(); if ($("yts-q").value.trim()) runYtSearch(); });
+      types.append(b);
+    });
+  }
+  async function runYtSearch() {
+    const q = $("yts-q").value.trim(), key = load(YT_KEY, "");
+    if (q.length < 2 || !key) return;
+    const seq = ++ytsSeq;
+    ytsErr("");
+    const r = $("yts-results"); r.hidden = false; r.textContent = ""; r.append(el("div", "msg", "Searching…"));
+    const params = { part: "snippet", q, type: ytsType, maxResults: "15", key, safeSearch: "none" };
+    if (ytsType === "video") params.videoEmbeddable = "true";   // only valid for video-only searches
+    let data;
+    try {
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${new URLSearchParams(params)}`);
+      data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const reason = ((data.error && data.error.errors && data.error.errors[0]) || {}).reason || "";
+        const msg = (data.error && data.error.message) || "";
+        if (reason === "quotaExceeded") throw new Error("Today’s YouTube search allowance is used up (about 100 searches). It resets at midnight Pacific time.");
+        if (/API key not valid|keyInvalid/i.test(msg + reason)) throw new Error("Google says this API key isn’t valid. Tap Change API key and paste it again.");
+        if (/referer|referrer/i.test(msg + reason)) throw new Error(`The key’s website restriction blocks this page. In Google Cloud, add ${location.origin}/* under Websites for this key.`);
+        if (/has not been used|disabled/i.test(msg + reason)) throw new Error("YouTube Data API v3 isn’t enabled for this key’s project. Enable it in Google Cloud, wait a minute, then search again.");
+        throw new Error(`YouTube search failed (HTTP ${res.status}${msg ? `: ${msg}` : ""}).`);
+      }
+    } catch (e) {
+      if (seq !== ytsSeq) return;
+      r.textContent = ""; r.hidden = true;
+      ytsErr(e instanceof TypeError ? "Couldn’t reach YouTube. Check the iPad’s connection." : e.message);
+      return;
+    }
+    if (seq !== ytsSeq) return;
+    r.textContent = "";
+    const items = (data.items || []).filter((it) => it.id && (it.id.videoId || it.id.playlistId));
+    if (!items.length) { r.append(el("div", "msg", `Nothing found for “${q}”.`)); }
+    items.forEach((it) => r.append(ytHit(it)));
+    $("yts-count").textContent = items.length ? `${items.length} results for “${q}”` : "";
+    renderYtSearch();
+  }
+  function ytHit(it) {
+    const isList = !!it.id.playlistId, sn = it.snippet || {};
+    const title = decode(sn.title || "Untitled");
+    const url = isList ? `https://www.youtube.com/playlist?list=${it.id.playlistId}` : `https://www.youtube.com/watch?v=${it.id.videoId}`;
+    const row = el("div", "hit");
+    const th = ((sn.thumbnails || {}).medium || (sn.thumbnails || {}).default || {}).url;
+    if (th) { const im = el("img"); im.src = th; im.alt = ""; im.loading = "lazy"; row.append(im); } else row.append(el("div", "ph"));
+    const txt = el("div"); txt.style.minWidth = "0";
+    txt.append(el("div", "t", title), el("div", "d", `${isList ? "Playlist" : "Video"} · ${decode(sn.channelTitle || "")}`));
+    const btns = el("div", "b");
+    const playBtn = el("button", "btn on", "Play"); playBtn.type = "button";
+    playBtn.addEventListener("click", () => play({ id: `search:${url}`, name: title, url, source: "youtube" }));
+    const saveBtn = el("button", "btn", "+ Preset"); saveBtn.type = "button";
+    const already = () => presets.some((p) => p.url === url);
+    if (already()) { saveBtn.textContent = "Saved"; saveBtn.disabled = true; }
+    saveBtn.addEventListener("click", () => {
+      if (already()) return;
+      presets.push({ id: uid(), name: title, url, source: "youtube", color: "", icon: "", order: Math.max(0, ...presets.map((p) => p.order || 0)) + 10 });
+      persist(); render();
+      saveBtn.textContent = "Saved"; saveBtn.disabled = true;
+    });
+    btns.append(playBtn, saveBtn);
+    row.append(txt, btns);
+    return row;
+  }
+  $("yts-form").addEventListener("submit", (e) => { e.preventDefault(); runYtSearch(); $("yts-q").blur(); });
+  $("yts-save").addEventListener("click", () => {
+    const key = $("yts-key").value.trim();
+    if (!/^AIza[0-9A-Za-z_\-]{30,}$/.test(key)) { ytsErr("That doesn’t look like a YouTube API key. It starts with AIza and is about 39 characters long."); return; }
+    save(YT_KEY, key); ytsKeyEdit = false; ytsErr(""); renderYtSearch(); $("yts-q").focus();
+  });
+  $("yts-change").addEventListener("click", () => { ytsKeyEdit = true; $("yts-key").value = load(YT_KEY, ""); renderYtSearch(); });
+  $("yts-clear").addEventListener("click", () => { $("yts-results").textContent = ""; $("yts-count").textContent = ""; $("yts-q").value = ""; ytsErr(""); renderYtSearch(); });
 
   /* ---------- Spotify search ---------- */
   // Spotify's Web API with the Authorization Code + PKCE flow: only the (public) Client ID is stored,
