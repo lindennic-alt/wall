@@ -135,6 +135,26 @@ body {
 .btn.danger.armed { background: var(--danger); border-color: var(--danger); color: #1a0705; }
 .err { color: var(--danger); font-size: .85em; margin: 0; }
 .ok { color: var(--spotify); font-size: .85em; margin: 0; }
+/* ---------- Spotify search ---------- */
+#search form { width: min(760px, 100%); }
+.s-row { display: flex; gap: 8px; }
+.s-row input { flex: 1; }
+.s-types { display: flex; gap: 6px; flex-wrap: wrap; }
+.s-types button { font: 700 .85em var(--font-body); color: var(--muted); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: .45em .9em; cursor: pointer; }
+.s-types button[aria-pressed="true"] { background: var(--spotify); border-color: var(--spotify); color: #06170c; }
+.s-results { max-height: 55vh; overflow-y: auto; -webkit-overflow-scrolling: touch; display: grid; gap: 4px; align-content: start; min-height: 120px; }
+.s-results h4 { margin: 10px 2px 2px; font: 600 .7em var(--font-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.s-results .msg { color: var(--muted); padding: 16px 4px; }
+.hit { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 6px; border-radius: 12px; }
+.hit:hover { background: var(--raise); }
+.hit img, .hit .ph { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; background: var(--raise); }
+.hit.artist img, .hit.artist .ph { border-radius: 50%; }
+.hit .t { font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hit .d { font-size: .85em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hit .b { display: flex; gap: 6px; }
+.steps { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; color: var(--ink); font-size: .92em; }
+.steps code { font: 500 .85em var(--font-mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: .15em .4em; overflow-wrap: anywhere; }
+.steps a { color: var(--amber); }
 @media (prefers-reduced-motion: reduce) { .preset { transition: none; } }
 </style>
 </head>
@@ -151,6 +171,7 @@ body {
   <nav class="bar" aria-label="Sources">
     <div class="sources" id="sources"></div>
     <div class="tools">
+      <button class="btn" type="button" id="search-open">Search</button>
       <button class="btn" type="button" id="backup-open">Backup</button>
       <button class="btn" type="button" id="edit-toggle">Edit</button>
     </div>
@@ -211,6 +232,36 @@ body {
       <span class="spacer"></span>
       <button class="btn" type="button" id="f-cancel">Cancel</button>
       <button class="btn on" type="submit">Save</button>
+    </div>
+  </form>
+</div>
+
+<div class="sheet" id="search" hidden>
+  <form id="search-form" novalidate>
+    <h3>Search Spotify</h3>
+    <div id="s-setup" hidden style="display:grid;gap:12px">
+      <p class="hint" style="margin:0">Searching needs a free Spotify developer app, set up once. It takes about five minutes.</p>
+      <ol class="steps">
+        <li>On any device, open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>, log in with your Spotify account and tap <b>Create app</b>.</li>
+        <li>Name it “Music Hub”. For <b>Redirect URI</b> enter <code id="s-redirect"></code> <button class="btn" type="button" id="s-copy-redirect">Copy</button></li>
+        <li>Tick <b>Web API</b>, agree to the terms and save.</li>
+        <li>Open the app’s <b>Settings</b>, copy the <b>Client ID</b> and paste it here.</li>
+      </ol>
+      <label for="s-client">Client ID
+        <input id="s-client" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="32 letters and numbers"></label>
+      <div class="actions"><span class="spacer"></span><button class="btn" type="button" id="s-close-setup">Close</button><button class="btn on" type="button" id="s-connect">Connect Spotify</button></div>
+    </div>
+    <div class="s-row" id="s-row" hidden>
+      <input id="s-q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Songs, artists, albums, playlists, podcasts">
+      <button class="btn on" type="submit">Search</button>
+    </div>
+    <div class="s-types" id="s-types" hidden></div>
+    <div class="s-results" id="s-results" hidden></div>
+    <p class="err" id="s-err" hidden></p>
+    <div class="actions" id="s-actions" hidden>
+      <button class="btn" type="button" id="s-disconnect">Disconnect Spotify</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" id="s-close">Close</button>
     </div>
   </form>
 </div>
@@ -615,6 +666,161 @@ body {
     persist(); render();
     $("b-err").hidden = true; $("b-ok").textContent = `Restored ${presets.length} presets.`; $("b-ok").hidden = false;
   });
+
+  /* ---------- Spotify search ---------- */
+  // Spotify's Web API with the Authorization Code + PKCE flow: only the (public) Client ID is stored,
+  // never a secret. Tokens stay on this iPad. Results play in the Spotify player like presets.
+  const SP_CLIENT = "music-hub:sp-client", SP_TOKEN = "music-hub:sp-token", SP_VERIFIER = "music-hub:sp-verifier", SP_TYPE = "music-hub:sp-type";
+  const REDIRECT = location.origin + location.pathname;
+  const S_TYPES = [["all", "All"], ["track", "Songs"], ["artist", "Artists"], ["album", "Albums"], ["playlist", "Playlists"], ["show", "Podcasts"]];
+  const S_LABEL = { track: "Songs", artist: "Artists", album: "Albums", playlist: "Playlists", show: "Podcasts", episode: "Episodes" };
+  let sType = load(SP_TYPE, "all"), sLastQuery = "", sTimer = null, sSeq = 0;
+
+  const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  function randomString(n) { const a = new Uint8Array(n); crypto.getRandomValues(a); return b64url(a).slice(0, n); }
+  async function connectSpotify() {
+    const id = $("s-client").value.trim();
+    if (!/^[0-9a-f]{32}$/i.test(id)) return sErr("That doesn’t look like a Client ID. It’s 32 letters and numbers, from the app’s Settings page.");
+    save(SP_CLIENT, id);
+    const verifier = randomString(64);
+    save(SP_VERIFIER, verifier);
+    const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+    const q = new URLSearchParams({ client_id: id, response_type: "code", redirect_uri: REDIRECT, code_challenge_method: "S256", code_challenge: challenge });
+    location.href = `https://accounts.spotify.com/authorize?${q}`;
+  }
+  async function tokenRequest(body) {
+    const res = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(body),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error_description || j.error || `HTTP ${res.status}`);
+    const old = load(SP_TOKEN, {}) || {};
+    const tok = { access: j.access_token, refresh: j.refresh_token || old.refresh, expires: Date.now() + (j.expires_in - 60) * 1000 };
+    save(SP_TOKEN, tok);
+    return tok;
+  }
+  // Back from Spotify's sign-in page: swap the code for tokens, then tidy the address.
+  async function finishSignIn() {
+    const qs = new URLSearchParams(location.search);
+    if (!qs.has("code") && !qs.has("error")) return;
+    history.replaceState(null, "", REDIRECT);
+    if (qs.get("error")) { openSearch(); sErr(qs.get("error") === "access_denied" ? "Spotify sign-in was cancelled." : `Spotify sign-in failed: ${qs.get("error")}`); return; }
+    try {
+      await tokenRequest({ grant_type: "authorization_code", code: qs.get("code"), redirect_uri: REDIRECT, client_id: load(SP_CLIENT, ""), code_verifier: load(SP_VERIFIER, "") });
+      openSearch();
+    } catch (e) { openSearch(); sErr(`Couldn’t finish connecting Spotify (${e.message}). Check the Redirect URI matches exactly, then try again.`); }
+  }
+  async function accessToken() {
+    const tok = load(SP_TOKEN, null);
+    if (!tok || !tok.refresh) return null;
+    if (tok.access && Date.now() < tok.expires) return tok.access;
+    try { return (await tokenRequest({ grant_type: "refresh_token", refresh_token: tok.refresh, client_id: load(SP_CLIENT, "") })).access; }
+    catch { save(SP_TOKEN, null); return null; }
+  }
+  async function spotifySearch(q, type) {
+    let token = await accessToken();
+    if (!token) { renderSearchSheet(); throw new Error("signed-out"); }
+    const types = type === "all" ? "track,artist,album,playlist,show" : type;
+    const url = `https://api.spotify.com/v1/search?${new URLSearchParams({ q, type: types, limit: type === "all" ? "5" : "20", market: "from_token" })}`;
+    let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (res.status === 401) {   // token expired early: refresh once
+      const tok = load(SP_TOKEN, {}) || {}; tok.expires = 0; save(SP_TOKEN, tok);
+      token = await accessToken();
+      if (!token) { renderSearchSheet(); throw new Error("signed-out"); }
+      res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    }
+    if (res.status === 429) throw new Error("Spotify says too many searches. Wait a minute and try again.");
+    if (res.status === 403) throw new Error("Spotify refused the search. In the developer dashboard, check the app has Web API ticked and your account is listed under User Management.");
+    if (!res.ok) throw new Error(`Spotify search failed (HTTP ${res.status}).`);
+    return res.json();
+  }
+
+  function sErr(msg) { const e = $("s-err"); e.textContent = msg || ""; e.hidden = !msg; }
+  function renderSearchSheet() {
+    const connected = !!(load(SP_TOKEN, null) || {}).refresh;
+    $("s-setup").hidden = connected;
+    ["s-row", "s-types", "s-results", "s-actions"].forEach((id) => { $(id).hidden = !connected; });
+    $("s-redirect").textContent = REDIRECT;
+    $("s-client").value = load(SP_CLIENT, "");
+    const types = $("s-types"); types.textContent = "";
+    S_TYPES.forEach(([k, label]) => {
+      const b = el("button", null, label); b.type = "button";
+      b.setAttribute("aria-pressed", String(sType === k));
+      b.addEventListener("click", () => { sType = k; save(SP_TYPE, k); renderSearchSheet(); runSearch(); });
+      types.append(b);
+    });
+  }
+  function openSearch() {
+    sErr(""); renderSearchSheet(); $("search").hidden = false;
+    if (!$("s-row").hidden) { if (!$("s-results").childElementCount) searchMsg("Search for a song, artist, album, playlist or podcast."); $("s-q").focus(); }
+  }
+  function searchMsg(text) { const r = $("s-results"); r.textContent = ""; r.append(el("div", "msg", text)); }
+
+  function hitInfo(type, it) {
+    const img = (imgs) => { const list = (imgs || []).slice().sort((a, b) => (a.width || 0) - (b.width || 0)); return (list.find((i) => (i.width || 0) >= 64) || list[list.length - 1] || {}).url || ""; };
+    if (type === "track") return { title: it.name, sub: `${it.artists.map((a) => a.name).join(", ")} · ${it.album.name}`, image: img(it.album.images) };
+    if (type === "artist") return { title: it.name, sub: "Artist · plays their top songs", image: img(it.images) };
+    if (type === "album") return { title: it.name, sub: `Album · ${it.artists.map((a) => a.name).join(", ")}`, image: img(it.images) };
+    if (type === "playlist") return { title: it.name, sub: `Playlist · ${(it.owner && it.owner.display_name) || "Spotify"}`, image: img(it.images) };
+    return { title: it.name, sub: `Podcast · ${it.publisher || ""}`, image: img(it.images) };
+  }
+  function hitRow(type, it) {
+    const info = hitInfo(type, it);
+    const row = el("div", `hit ${type}`);
+    if (info.image) { const im = el("img"); im.src = info.image; im.alt = ""; im.loading = "lazy"; row.append(im); } else row.append(el("div", "ph"));
+    const txt = el("div"); txt.style.minWidth = "0";
+    txt.append(el("div", "t", info.title), el("div", "d", info.sub));
+    const btns = el("div", "b");
+    const source = type === "show" ? "podcast" : "spotify";
+    const preset = { id: `search:${it.uri}`, name: info.title, url: it.external_urls.spotify, source };
+    const playBtn = el("button", "btn on", "Play"); playBtn.type = "button";
+    playBtn.addEventListener("click", () => { $("search").hidden = true; play(preset); });
+    const saveBtn = el("button", "btn", "+ Preset"); saveBtn.type = "button";
+    const already = () => presets.some((p) => p.url === preset.url);
+    if (already()) { saveBtn.textContent = "Saved"; saveBtn.disabled = true; }
+    saveBtn.addEventListener("click", () => {
+      if (already()) return;
+      presets.push({ id: uid(), name: info.title, url: preset.url, source, color: "", icon: "", order: Math.max(0, ...presets.map((p) => p.order || 0)) + 10 });
+      persist(); render();
+      saveBtn.textContent = "Saved"; saveBtn.disabled = true;
+    });
+    btns.append(playBtn, saveBtn);
+    row.append(txt, btns);
+    return row;
+  }
+  async function runSearch() {
+    const q = $("s-q").value.trim();
+    if (q.length < 2) return;
+    sLastQuery = q;
+    const seq = ++sSeq;
+    sErr(""); searchMsg("Searching…");
+    let data;
+    try { data = await spotifySearch(q, sType); }
+    catch (e) { if (seq === sSeq) { if (e.message === "signed-out") { sErr("Spotify signed out. Connect again to search."); } else { searchMsg(""); sErr(e.message); } } return; }
+    if (seq !== sSeq) return;   // a newer search finished first
+    const r = $("s-results"); r.textContent = "";
+    const order = sType === "all" ? ["track", "artist", "album", "playlist", "show"] : [sType];
+    let count = 0;
+    order.forEach((type) => {
+      const items = ((data[`${type}s`] || {}).items || []).filter(Boolean);   // Spotify sometimes returns null playlists
+      if (!items.length) return;
+      if (sType === "all") r.append(el("h4", null, S_LABEL[type]));
+      items.forEach((it) => r.append(hitRow(type, it)));
+      count += items.length;
+    });
+    if (!count) searchMsg(`Nothing found for “${q}”.`);
+  }
+
+  $("search-open").addEventListener("click", openSearch);
+  $("s-close").addEventListener("click", () => { $("search").hidden = true; });
+  $("s-close-setup").addEventListener("click", () => { $("search").hidden = true; });
+  $("search").addEventListener("click", (e) => { if (e.target === $("search")) $("search").hidden = true; });
+  $("s-connect").addEventListener("click", () => { sErr(""); connectSpotify(); });
+  $("s-copy-redirect").addEventListener("click", () => { navigator.clipboard.writeText(REDIRECT).then(() => { $("s-copy-redirect").textContent = "Copied"; }, () => {}); });
+  $("s-disconnect").addEventListener("click", () => { save(SP_TOKEN, null); $("s-results").textContent = ""; renderSearchSheet(); });
+  $("search-form").addEventListener("submit", (e) => { e.preventDefault(); clearTimeout(sTimer); runSearch(); $("s-q").blur(); });
+  $("s-q").addEventListener("input", () => { clearTimeout(sTimer); if ($("s-q").value.trim() !== sLastQuery) sTimer = setTimeout(runSearch, 600); });
+  finishSignIn();
 
   /* ---------- keep the screen awake ---------- */
   async function wake() { try { if ("wakeLock" in navigator && document.visibilityState === "visible") await navigator.wakeLock.request("screen"); } catch {} }
