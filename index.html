@@ -93,7 +93,8 @@ body.wall { font-size: clamp(14px, 1.6vw, 21px); }
 .allday .lab { padding-top: .35em; font-size: .6em; }
 .allday .col { padding: .15em .25em; gap: .15em; flex-direction: row; flex-wrap: wrap; }
 .allday .chip { font-size: .72em; padding: .15em .4em; width: auto; max-width: 100%; }
-.cal-head .dh { padding-block: .3em; }
+.cal-head .dh { padding-block: .2em; }
+.cal-head .dh .num { font-size: 1.15em; }
 .cal .strip { flex-wrap: nowrap; overflow-x: auto; font-size: .72em; padding: .3em .6em; scrollbar-width: none; }
 /* a week at a glance: compact day headers (weather under the date) */
 .cal.wk .dh { flex-wrap: wrap; padding: .4em .45em; gap: .15em .4em; }
@@ -195,6 +196,13 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   .cal { min-height: 80vh; }
   .dwx .pp { display: none; }
 }
+/* Blocks too short for title + time drop the time line (the grid shows it)
+   and give the title every line that fits (set per block in fitBlocks). */
+.ev { padding: .15em .4em; }
+.ev b { line-height: 1.15; }
+.ev.short .tm { display: none; }
+.ev.tiny { padding-block: 0; }
+.ev.tiny b { font-size: .8em; line-height: 1.05; }
 </style>
 </head>
 <body>
@@ -547,6 +555,20 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
       grid.append(col);
     });
     sc.scrollLeft = keep;   // the minute redraw keeps the scroll position
+    fitBlocks(grid);
+  }
+  function fitBlocks(root) {
+    root.querySelectorAll(".ev").forEach((ev) => {
+      const b = ev.querySelector("b"), tm = ev.querySelector(".tm");
+      if (!b) return;
+      const lh = parseFloat(getComputedStyle(b).lineHeight) || 18;
+      const room = ev.clientHeight - 4;
+      const withTime = Math.floor((room - (tm ? tm.offsetHeight : 0)) / lh);
+      const short = withTime < 1 || (withTime < 2 && b.scrollHeight > lh * 1.5);
+      ev.classList.toggle("short", short);
+      ev.classList.toggle("tiny", room < lh);   // under one line: smaller text
+      b.style.webkitLineClamp = String(Math.max(1, short ? Math.floor(room / lh) : Math.min(3, withTime)));
+    });
   }
 
   function bolusButton(b, cls) {
