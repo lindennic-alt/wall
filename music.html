@@ -721,7 +721,7 @@ body {
     let token = await accessToken();
     if (!token) { renderSearchSheet(); throw new Error("signed-out"); }
     const types = type === "all" ? "track,artist,album,playlist,show" : type;
-    const url = `https://api.spotify.com/v1/search?${new URLSearchParams({ q, type: types, limit: type === "all" ? "5" : "20", market: "from_token" })}`;
+    const url = `https://api.spotify.com/v1/search?${new URLSearchParams({ q, type: types, limit: type === "all" ? "5" : "10", market: "from_token" })}`;
     let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (res.status === 401) {   // token expired early: refresh once
       const tok = load(SP_TOKEN, {}) || {}; tok.expires = 0; save(SP_TOKEN, tok);
@@ -730,8 +730,11 @@ body {
       res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     }
     if (res.status === 429) throw new Error("Spotify says too many searches. Wait a minute and try again.");
-    if (res.status === 403) throw new Error("Spotify refused the search. In the developer dashboard, check the app has Web API ticked and your account is listed under User Management.");
-    if (!res.ok) throw new Error(`Spotify search failed (HTTP ${res.status}).`);
+    if (!res.ok) {
+      const why = await res.json().then((j) => (j.error && j.error.message) || "", () => "");
+      if (res.status === 403) throw new Error(`Spotify refused the search${why ? ` (“${why}”)` : ""}. Spotify’s developer apps now need the app owner to have Spotify Premium, and your account must be listed under the app’s User Management. After fixing either, tap Disconnect Spotify and connect again.`);
+      throw new Error(`Spotify search failed (HTTP ${res.status}${why ? `: ${why}` : ""}).`);
+    }
     return res.json();
   }
 
