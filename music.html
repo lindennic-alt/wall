@@ -256,6 +256,7 @@ body {
         <div class="title" id="np-title">—</div>
         <div class="sub" id="np-sub">Player is idle</div>
       </div>
+      <button class="btn" type="button" id="np-mode" hidden></button>
       <a class="btn" id="np-open" href="#" target="_blank" rel="noopener" hidden>Open in app</a>
     </div>
     <div class="controls" id="yt-controls" hidden>
@@ -622,7 +623,11 @@ body {
   function play(p) {
     let target = playable(p.url);
     // With Spotify connected, Spotify items play in the Spotify app (full tracks) and the hub is the remote.
-    if ((target.kind === "spotify" || target.kind === "liked") && spConnected()) target = { ...target, kind: "app", liked: target.kind === "liked" };
+    const isSpotify = target.kind === "spotify" || target.kind === "liked";
+    if (isSpotify && spConnected() && load(SP_MODE, "app") === "app") target = { ...target, kind: "app", liked: target.kind === "liked" };
+    const mode = $("np-mode");
+    mode.hidden = !(isSpotify && spConnected());
+    mode.textContent = target.kind === "app" ? "Play in hub instead" : "Play in Spotify app";
     playing = { ...p, kind: target.kind, target };
     stopOthers(target.kind);
     note("");
@@ -637,7 +642,7 @@ body {
       appPlay(playing);
     } else if (target.kind === "spotify") {
       show("spotify");
-      note("Connect Spotify (Search Spotify › Connect) to play full songs through the Spotify app.");
+      note(spConnected() ? "Only hearing 30-second previews? Tap Log in inside the Spotify player once, or switch to Play in Spotify app." : "Connect Spotify (Search Spotify › Connect) to play full songs through the Spotify app.");
       if (spApi) startSpotify(playing); else { spPending = playing; $("np-sub").textContent = "Loading the Spotify player…"; }
     } else if (target.kind === "liked") {
       show("liked");
@@ -960,7 +965,12 @@ body {
   /* ---------- Spotify app remote ---------- */
   // Plays through Spotify Connect: the Spotify app (on this iPad or another device) does the playing,
   // so songs are full length with Premium, and the hub shows what's on and sends the controls.
-  const SP_DEVICE = "music-hub:sp-device";
+  const SP_DEVICE = "music-hub:sp-device", SP_MODE = "music-hub:sp-mode";
+  let devWatch = null;
+  $("np-mode").addEventListener("click", () => {
+    save(SP_MODE, load(SP_MODE, "app") === "app" ? "hub" : "app");
+    if (playing) { const { kind, target, ...p } = playing; play(p); }
+  });
   const app = { active: false, playing: false, poll: null, me: null, devices: [] };
   const spConnected = () => { const t = load(SP_TOKEN, null); return !!(t && t.refresh && hasScopes(t)); };
   async function appCall(method, path, body) {
@@ -1004,9 +1014,19 @@ body {
     const want = load(SP_DEVICE, ""), d = app.devices;
     return (d.find((x) => x.id === want) || d.find((x) => x.is_active) || d.find((x) => /tablet/i.test(x.type)) || d[0] || {}).id || "";
   }
+  // While the "open the Spotify app" message shows, keep looking; once the app is back, start the music.
+  function watchForDevice(p) {
+    clearInterval(devWatch);
+    const until = Date.now() + 120000;
+    devWatch = setInterval(async () => {
+      if (playing !== p || Date.now() > until) { clearInterval(devWatch); return; }
+      if (document.visibilityState !== "visible") return;
+      try { if ((await appDevices()).length) { clearInterval(devWatch); appPlay(p); } } catch {}
+    }, 3000);
+  }
   function noDevice() {
     $("spc-title").textContent = "Open the Spotify app on this iPad";
-    $("spc-artist").textContent = "The hub plays through the Spotify app. Open it once (Open in app), come back to the hub, and tap the preset again. Once music is playing, Spotify keeps running in the background.";
+    $("spc-artist").textContent = "Tap Open in app, then come back to the hub. The music starts by itself once Spotify is open. Or tap Play in hub instead.";
     $("spc-art").removeAttribute("src");
   }
 
@@ -1018,7 +1038,7 @@ body {
     try {
       await appDevices();
       const device = pickDevice();
-      if (!device) { noDevice(); return; }
+      if (!device) { noDevice(); watchForDevice(p); return; }
       if (playing !== p) return;
       const q = `?device_id=${encodeURIComponent(device)}`;
       await appCall("PUT", `/me/player/shuffle?state=${shuffle}&device_id=${encodeURIComponent(device)}`).catch(() => {});
@@ -1040,10 +1060,11 @@ body {
       appStartPolling();
     } catch (e) {
       if (playing !== p) return;
-      if (e.status === 404) { noDevice(); return; }
+      if (e.status === 404) { noDevice(); watchForDevice(p); return; }
       if (e.status >= 500) {
         $("spc-title").textContent = "Spotify couldn’t reach the Spotify app";
-        $("spc-artist").textContent = "The app is probably asleep in the background. Open the Spotify app, play any song for a moment, come back to the hub and tap the preset again.";
+        watchForDevice(p);
+        $("spc-artist").textContent = "The app is probably asleep in the background. Tap Open in app, then come back; the hub will try again by itself. Or tap Play in hub instead.";
         return;
       }
       if (e.status === 403 && /premium/i.test(e.message + (e.reason || ""))) { $("spc-title").textContent = "Spotify Premium is needed to control playback"; $("spc-artist").textContent = "Use Open in app instead."; return; }
