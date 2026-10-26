@@ -510,9 +510,12 @@ body {
     else yt.loadVideoById(t.video);
   }
   function startYouTube(p) {
-    const t = p.target, want = t.list || t.video, seq = ++ytSeq, before = ytList();
+    const t = p.target, want = t.list || t.video, seq = ++ytSeq, before = ytList(), beforeVideo = ytVideo();
     const current = () => seq === ytSeq && playing && playing.id === p.id;   // false once another preset is tapped
-    const switched = () => (t.list ? ytList() !== "[]" && (ytList() !== before || ytLoaded === want) : ytVideo() === t.video);
+    // A long playlist can take a while to report its contents, so a new video starting also counts as switched.
+    const switched = () => (t.list
+      ? (ytList() !== "[]" && (ytList() !== before || ytLoaded === want)) || (ytVideo() !== "" && ytVideo() !== beforeVideo)
+      : ytVideo() === t.video);
     ytShufflePending = shuffle && !!t.list;
     ytSwitched = switched;
     try { yt.stopVideo(); } catch {}
@@ -534,8 +537,8 @@ body {
           try { yt.playVideo(); } catch {}
           note("If it doesn’t start, tap play in the video.");
         }
-      }, 3500);
-    }, 3500);
+      }, 4000);
+    }, 6000);
   }
   function startSpotify(p) {
     if (sp) { sp.loadUri(p.target.uri); sp.play(); return; }
