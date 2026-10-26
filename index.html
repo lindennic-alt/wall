@@ -81,11 +81,20 @@ svg { --icon-sun: var(--sun); --icon-cloud: var(--muted); --icon-drop: var(--shi
 .cal-head, .allday, .grid { display: grid; grid-template-columns: 3.6em repeat(var(--days, 7), var(--colw, minmax(0, 1fr)));
   width: max-content; min-width: 100%; }
 .cal-head .month, .allday .lab, .gutter { position: sticky; left: 0; z-index: 4; background: var(--panel); }
-/* On the wall each hour has a fixed height and the day scrolls; the day
-   headers and all-day row stay on top. */
+/* Day headers and the all-day row stay on top. */
 .cal-top { position: sticky; top: 0; z-index: 6; background: var(--panel); width: max-content; min-width: 100%; }
 .dh { scroll-snap-align: start; }
 body.wall { font-size: clamp(14px, 1.6vw, 21px); }
+/* No clock or current-weather band (user, 2026-10-26): the calendar gets the
+   whole screen; each day's forecast sits beside its name. Compact all-day row. */
+.top { display: none; }
+.board { grid-template-rows: minmax(0, 1fr); }
+.allday { min-height: 1.4em; }
+.allday .lab { padding-top: .35em; font-size: .6em; }
+.allday .col { padding: .15em .25em; gap: .15em; flex-direction: row; flex-wrap: wrap; }
+.allday .chip { font-size: .72em; padding: .15em .4em; width: auto; max-width: 100%; }
+.cal-head .dh { padding-block: .3em; }
+.cal .strip { flex-wrap: nowrap; overflow-x: auto; font-size: .72em; padding: .3em .6em; scrollbar-width: none; }
 /* a week at a glance: compact day headers (weather under the date) */
 .cal.wk .dh { flex-wrap: wrap; padding: .4em .45em; gap: .15em .4em; }
 .cal.wk .dh .num { font-size: 1.1em; min-width: 1.7em; height: 1.7em; }
@@ -262,7 +271,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   const EMBED = !!window.WALL_EMBED;
   // Always seven days; VIS of them fit the screen and the rest scroll in.
   // The wall shows three (bigger blocks); a desktop browser shows the week.
-  const NDAYS = 7, HOUR_PX = 58;   // wall: height of one hour
+  const NDAYS = 7;
   const visFor = () => (EMBED && window.innerWidth >= 760 ? 7 : 3);
   let VIS = visFor();
   const DATA_EVERY = 5 * 60e3, WX_EVERY = 20 * 60e3, RELOAD_EVERY = 6 * 3600e3, POP_CLOSE = 90e3;
@@ -473,7 +482,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   function renderCal() {
     const today = new Date(), keys = Array.from({ length: NDAYS }, (_, n) => iso(addDays(today, n)));
     const cal = $("cal"); cal.style.setProperty("--days", NDAYS); cal.classList.toggle("wk", VIS > 3);
-    const sc = $("scroller"), keep = sc.scrollLeft, keepTop = sc.scrollTop;
+    const sc = $("scroller"), keep = sc.scrollLeft;
     const colw = (sc.clientWidth - 3.6 * parseFloat(getComputedStyle(sc).fontSize)) / VIS;
     cal.style.setProperty("--colw", `${Math.max(colw, 60)}px`);
     const first = Math.round(keep / Math.max(colw, 1));
@@ -510,7 +519,6 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     });
 
     const grid = $("grid"); grid.textContent = "";
-    grid.style.height = EMBED ? "" : `${((to - from) / 60) * HOUR_PX}px`;
     const span = to - from, pct = (m) => `${((m - from) / span) * 100}%`;
     const gutter = el("div", "gutter");
     for (let m = from + 60; m < to; m += 60) { const h = el("div", "hour", fmtClock(m)); h.style.top = pct(m); gutter.append(h); }
@@ -539,11 +547,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
       grid.append(col);
     });
     sc.scrollLeft = keep;   // the minute redraw keeps the scroll position
-    sc.scrollTop = keepTop;
-    nowTop = EMBED ? 0 : Math.max(0, ((nowMin - from) / 60 - 1) * HOUR_PX);
-    if (!placed && !EMBED) { sc.scrollTop = nowTop; placed = true; }
   }
-  let nowTop = 0, placed = false;   // wall: scroll to an hour before now
 
   function bolusButton(b, cls) {
     const btn = el("button", cls);
@@ -677,7 +681,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   let back = null;
   if (!EMBED) $("scroller").addEventListener("scroll", () => {
     clearTimeout(back);
-    back = setTimeout(() => $("scroller").scrollTo({ left: 0, top: nowTop, behavior: "smooth" }), 120e3);
+    back = setTimeout(() => $("scroller").scrollTo({ left: 0, behavior: "smooth" }), 120e3);
   }, { passive: true });
   if (!EMBED && !DEMO && !cfg.token && location.protocol !== "file:") {
     fetch("schedule.json", { method: "HEAD" }).then((r) => { if (!r.ok) openSetup(); }).catch(openSetup);
