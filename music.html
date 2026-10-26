@@ -1027,13 +1027,13 @@ body {
         if (!app.me) app.me = await appCall("GET", "/me");
         body = { context_uri: `spotify:user:${app.me.id}:collection` };
       } else body = /^spotify:(track|episode):/.test(t.uri) ? { uris: [t.uri] } : { context_uri: t.uri };
-      try { await appCall("PUT", `/me/player/play${q}`, body); }
+      try { await appPlayWithRetry(device, q, body); }
       catch (e) {
-        if (!t.liked || e.status === 404 || e.status === 403) throw e;
+        if (!t.liked || e.status === 404 || e.status === 403 || e.status >= 500) throw e;
         // Liked Songs as a context isn't accepted everywhere: send the songs themselves instead.
         await loadLiked();
         const uris = liked.order.slice(0, 100).map((i) => liked.tracks[i].uri);
-        await appCall("PUT", `/me/player/play${q}`, { uris });
+        await appPlayWithRetry(device, q, { uris });
       }
       save(SP_DEVICE, device);
       note("");
@@ -1041,9 +1041,28 @@ body {
     } catch (e) {
       if (playing !== p) return;
       if (e.status === 404) { noDevice(); return; }
+      if (e.status >= 500) {
+        $("spc-title").textContent = "Spotify couldn’t reach the Spotify app";
+        $("spc-artist").textContent = "The app is probably asleep in the background. Open the Spotify app, play any song for a moment, come back to the hub and tap the preset again.";
+        return;
+      }
       if (e.status === 403 && /premium/i.test(e.message + (e.reason || ""))) { $("spc-title").textContent = "Spotify Premium is needed to control playback"; $("spc-artist").textContent = "Use Open in app instead."; return; }
       $("spc-title").textContent = "Couldn’t start Spotify";
       $("spc-artist").textContent = e.code === "signed-out" ? e.message : `Spotify said: ${e.message}. Use Open in app, or tap the preset again.`;
+    }
+  }
+  // Spotify answers 502/503 when it can't reach the app (often asleep in the background).
+  // Hand playback to the device first, then ask again.
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function appPlayWithRetry(device, q, body) {
+    try { return await appCall("PUT", `/me/player/play${q}`, body); }
+    catch (e) {
+      if (!(e.status >= 500)) throw e;
+      $("spc-title").textContent = "Waking the Spotify app…";
+      await wait(1200);
+      await appCall("PUT", "/me/player", { device_ids: [device], play: false }).catch(() => {});
+      await wait(1500);
+      return await appCall("PUT", `/me/player/play${q}`, body);
     }
   }
   function appStartPolling() {
