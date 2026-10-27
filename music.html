@@ -303,6 +303,12 @@ body {
     save(KEY, presets);
   }
   try { Object.keys(localStorage).filter((k) => k.startsWith("music-hub:sp-") || k === "music-hub:filter").forEach((k) => localStorage.removeItem(k)); } catch {}
+  // One-time removal the owner asked for (Oct 2026): the Party preset. Runs once per iPad.
+  if (!load("music-hub:removed-party", false)) {
+    presets = presets.filter((p) => !(/^party$/i.test((p.name || "").trim()) || /list=PLVmYAgeOWRbo\b/.test(p.url || "")));
+    save(KEY, presets);
+    save("music-hub:removed-party", true);
+  }
   let shuffle = load(SHUFFLE_KEY, false);
   let editing = false, playing = null;
 
