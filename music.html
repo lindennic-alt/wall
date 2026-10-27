@@ -127,6 +127,27 @@ body {
 .btn.danger { color: var(--danger); }
 .btn.danger.armed { background: var(--danger); border-color: var(--danger); color: #1a0705; }
 .err { color: var(--danger); font-size: .85em; margin: 0; }
+/* ---------- edit all ---------- */
+#bulk form { width: min(860px, 100%); }
+.bulk-rows { display: grid; gap: 8px; max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.brow { display: grid; grid-template-columns: 2.2em 3.4em minmax(0, 1fr) minmax(0, 1.6fr) auto; gap: 8px; align-items: center; }
+.brow .n { font: 600 .75em var(--font-mono); color: var(--muted); text-align: right; }
+.sheet .brow input { padding: .55em .6em; font-size: .95rem; }
+.sheet .brow input[aria-invalid="true"] { border-color: var(--danger); }
+.brow .b { display: flex; gap: 4px; }
+.brow .b button { font: 600 .8em var(--font-mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: .45em .6em; cursor: pointer; }
+.brow .b button:disabled { opacity: .3; cursor: default; }
+.brow .b button.x { color: var(--danger); }
+.bulk-head { display: grid; grid-template-columns: 2.2em 3.4em minmax(0, 1fr) minmax(0, 1.6fr) auto; gap: 8px; font-size: .75em; color: var(--muted); }
+@media (max-width: 640px) {
+  .brow { grid-template-columns: 2.2em minmax(0, 1fr) auto; }
+  .brow .icon { grid-column: 2; grid-row: 1; width: 3.4em; }
+  .brow .name { grid-column: 2; grid-row: 2; }
+  .brow .url { grid-column: 2; grid-row: 3; }
+  .brow .b { grid-column: 3; grid-row: 1 / 4; flex-direction: column; }
+  .brow { padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .bulk-head { display: none; }
+}
 .ok { color: var(--ok); font-size: .85em; margin: 0; }
 /* ---------- search results ---------- */
 .s-row { display: flex; gap: 8px; }
@@ -178,6 +199,7 @@ body {
 
   <nav class="bar" aria-label="Hub tools">
     <div class="tools">
+      <button class="btn" type="button" id="bulk-open">Edit all</button>
       <button class="btn" type="button" id="backup-open">Backup</button>
       <button class="btn" type="button" id="edit-toggle">Edit</button>
     </div>
@@ -258,6 +280,22 @@ body {
       <span class="spacer"></span>
       <button class="btn" type="button" id="f-cancel">Cancel</button>
       <button class="btn on" type="submit">Save</button>
+    </div>
+  </form>
+</div>
+
+<div class="sheet" id="bulk" hidden>
+  <form id="bulk-form" novalidate>
+    <h3>Edit all presets</h3>
+    <p class="hint" style="margin:0">Change any names or links, then save once. Leave a row empty to remove it.</p>
+    <div class="bulk-head" aria-hidden="true"><span></span><span>Icon</span><span>Name</span><span>YouTube link</span><span></span></div>
+    <div class="bulk-rows" id="bulk-rows"></div>
+    <div><button class="btn" type="button" id="bulk-add">+ Add row</button></div>
+    <p class="err" id="bulk-err" hidden></p>
+    <div class="actions">
+      <span class="spacer"></span>
+      <button class="btn" type="button" id="bulk-cancel">Cancel</button>
+      <button class="btn on" type="submit">Save all</button>
     </div>
   </form>
 </div>
@@ -611,6 +649,67 @@ body {
     if (!deleteArmed) { deleteArmed = true; $("f-delete").textContent = "Tap again to delete"; $("f-delete").classList.add("armed"); return; }
     presets = presets.filter((p) => p !== current);
     persist(); closeSheet(); render();
+  });
+
+  /* ---------- edit all ---------- */
+  let bulk = [];
+  function renderBulk(focusRow, focusField) {
+    const box = $("bulk-rows"); box.textContent = "";
+    bulk.forEach((r, i) => {
+      const row = el("div", "brow");
+      const field = (key, cls, ph, label) => {
+        const inp = el("input", cls); inp.id = `bulk-${key}-${i}`; inp.value = r[key] || ""; inp.placeholder = ph;
+        inp.autocomplete = "off"; inp.setAttribute("aria-label", `${label}, row ${i + 1}`);
+        if (key === "url") { inp.type = "url"; inp.inputMode = "url"; inp.autocapitalize = "off"; inp.spellcheck = false; }
+        if (key === "icon") inp.maxLength = 4;
+        if (r.bad && r.bad.includes(key)) inp.setAttribute("aria-invalid", "true");
+        inp.addEventListener("input", () => { r[key] = inp.value; });
+        return inp;
+      };
+      const b = el("div", "b");
+      const up = el("button", null, "▲"), down = el("button", null, "▼"), x = el("button", "x", "✕");
+      [up, down, x].forEach((btn) => { btn.type = "button"; });
+      up.setAttribute("aria-label", `Move row ${i + 1} up`); down.setAttribute("aria-label", `Move row ${i + 1} down`); x.setAttribute("aria-label", `Remove row ${i + 1}`);
+      up.disabled = i === 0; down.disabled = i === bulk.length - 1;
+      up.addEventListener("click", () => { [bulk[i - 1], bulk[i]] = [bulk[i], bulk[i - 1]]; renderBulk(); });
+      down.addEventListener("click", () => { [bulk[i + 1], bulk[i]] = [bulk[i], bulk[i + 1]]; renderBulk(); });
+      x.addEventListener("click", () => { bulk.splice(i, 1); renderBulk(); });
+      b.append(up, down, x);
+      row.append(el("span", "n", String(i + 1)), field("icon", "icon", "🎷", "Icon"), field("name", "name", "Name", "Name"), field("url", "url", "https://youtube.com/playlist?list=…", "YouTube link"), b);
+      box.append(row);
+    });
+    if (focusRow != null) { const f = $(`bulk-${focusField}-${focusRow}`); if (f) { f.focus(); f.scrollIntoView({ block: "nearest" }); } }
+  }
+  $("bulk-open").addEventListener("click", () => {
+    bulk = sorted().map((p) => ({ id: p.id, name: p.name, url: p.url, icon: p.icon || "", color: p.color || "" }));
+    if (!bulk.length) bulk.push({ name: "", url: "", icon: "" });
+    $("bulk-err").hidden = true; renderBulk(); $("bulk").hidden = false;
+  });
+  $("bulk-add").addEventListener("click", () => { bulk.push({ name: "", url: "", icon: "" }); renderBulk(bulk.length - 1, "name"); });
+  $("bulk-cancel").addEventListener("click", () => { $("bulk").hidden = true; });
+  $("bulk").addEventListener("click", (e) => { if (e.target === $("bulk")) $("bulk").hidden = true; });
+  $("bulk-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const problems = [];
+    const keep = [];
+    bulk.forEach((r, i) => {
+      r.name = (r.name || "").trim(); r.url = (r.url || "").trim(); r.icon = (r.icon || "").trim(); r.bad = [];
+      if (!r.name && !r.url) return;   // empty row: removed
+      if (!r.name) r.bad.push("name");
+      if (!r.url || playable(r.url).kind !== "youtube") r.bad.push("url");
+      if (r.bad.length) problems.push(`Row ${i + 1}: ${!r.name ? "add a name" : "the link isn’t a YouTube video or playlist link"}`);
+      keep.push(r);
+    });
+    if (problems.length) {
+      $("bulk-err").textContent = problems.join(". ") + ".";
+      $("bulk-err").hidden = false;
+      const first = bulk.findIndex((r) => r.bad && r.bad.length);
+      renderBulk(first, bulk[first].bad[0]);
+      return;
+    }
+    presets = keep.map((r, i) => ({ id: r.id || uid(), name: r.name, url: r.url, source: "youtube", color: r.color || "", icon: r.icon, order: (i + 1) * 10 }));
+    persist(); render();
+    $("bulk").hidden = true;
   });
 
   /* ---------- backup ---------- */
