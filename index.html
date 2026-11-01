@@ -203,6 +203,35 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
 .ev.short .tm { display: none; }
 .ev.tiny { padding-block: 0; }
 .ev.tiny b { font-size: .8em; line-height: 1.05; }
+/* ---------- week view (phones, or ?week): 7 days stacked, maintenance hidden by default (user, 2026-11-01) ---------- */
+body.weekmode { overflow: auto; font-size: 15px; }
+body.weekmode .board { height: auto; min-height: 100%; grid-template-rows: auto auto; }
+body.weekmode .clock { font-size: 44px; }
+.wk-view { display: flex; flex-direction: column; gap: 10px; }
+.wk-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wk-bar h2 { font-size: 1rem; margin: 0; flex: 1; min-width: 9em; }
+.wk-bar button { font: inherit; font-size: .82rem; background: var(--panel); border: 1px solid var(--line-strong); color: var(--ink); border-radius: 7px; padding: 4px 10px; cursor: pointer; }
+.wk-days { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 900px) { .wk-days { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; } }
+.wk-day { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.wk-day.today { border-color: var(--shift); box-shadow: 0 0 0 1px var(--shift); }
+.wk-day h3 { margin: 0 0 2px; font-size: .92rem; display: flex; gap: 6px; align-items: baseline; }
+.wk-day h3 .d { font-family: var(--font-num); font-weight: 800; font-size: 1.2rem; }
+.wk-day.today h3 { color: var(--shift); }
+.wk-b { border-left: 4px solid var(--line-strong); background: var(--bg); border-radius: 6px; padding: 4px 8px; font-size: .88rem; min-width: 0; }
+.wk-b .t { color: var(--muted); font-size: .78rem; margin-right: 6px; font-variant-numeric: tabular-nums; }
+.wk-b b { overflow-wrap: anywhere; }
+.wk-b.quiet { background: none; border-left-style: dashed; color: var(--muted); }
+.wk-b.over { opacity: .5; }
+.wk-b.k-shift { border-left-color: var(--shift); } .wk-b.k-bolus { border-left-color: var(--bolus); } .wk-b.k-study { border-left-color: var(--study); }
+.wk-b.k-exercise { border-left-color: var(--exercise); } .wk-b.k-leisure { border-left-color: var(--leisure); } .wk-b.k-meal { border-left-color: #b4507a; } .wk-b.k-errand { border-left-color: #5b6b7d; } .wk-b.k-rhythm { border-left-color: var(--rhythm); }
+.wk-b.k-shift, .wk-b.k-bolus, .wk-b.k-study, .wk-b.k-exercise, .wk-b.k-leisure, .wk-b.k-meal, .wk-b.k-errand, .wk-b.k-rhythm { background: var(--bg); }
+.wk-b ul { margin: 3px 0 0; padding-left: 16px; font-size: .82rem; }
+.wk-b li.done { text-decoration: line-through; color: var(--muted); }
+.wk-all { font-size: .82rem; border: 1px solid var(--line-strong); border-radius: 6px; padding: 3px 7px; overflow-wrap: anywhere; }
+.wk-all.due { border-color: var(--due); color: var(--due); }
+.wk-none { color: var(--muted); font-size: .84rem; margin: 0; }
+.wk-status { color: var(--muted); font-size: .8rem; }
 </style>
 </head>
 <body>
@@ -224,6 +253,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     </div>
     <div class="strip" id="strip"></div>
   </section>
+  <section class="wk-view" id="wk" aria-label="This week" hidden></section>
 </div>
 
 <div class="setup" id="setup" hidden>
@@ -455,6 +485,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
       if (s == null) continue;
       if (e == null || e <= s || e === 1439) e = 1440;   // overnight or "23:59": to midnight
       const kind = BLOCK_KIND[b.kind] || "rhythm";
+      if (kind === "quiet" && !cfg.maint) continue;   // maintenance hidden by default (user, 2026-11-01)
       const ev = { kind, title: b.title, start: s, end: e, endLabel: b.end, key };
       if (b.kind === "bolus" || b.kind === "study") {
         Object.assign(ev, { pool: b.kind, tasks: byPool[b.kind], done: byPool[b.kind].filter((t) => t.done).length });
@@ -637,6 +668,10 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     if (s && s.overdue.length) f.append(el("span", "pill due", `${s.overdue.length} overdue`));
     const st = el("span", "status" + (dataErr ? " warn" : ""),
       dataErr || (lastData ? `Updated ${lastData.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : "Loading…"));
+    const mt = el("button", "gear", cfg.maint ? "Hide maintenance" : "Show maintenance");
+    mt.type = "button";
+    mt.addEventListener("click", (e) => { e.stopPropagation(); cfg = { ...cfg, maint: !cfg.maint }; store.set(cfg); render(); });
+    st.append(mt);
     if (!EMBED) {
       const gear = el("button", "gear", "Setup");
       gear.type = "button";
@@ -646,7 +681,69 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
     f.append(st);
   }
 
-  function render() { applyTheme(); renderClock(); renderNow(); renderCal(); renderStrip(); }
+  // Week view (user, 2026-11-01): phones get the 7 days stacked as a list;
+  // ?week forces it, ?cal forces the hour grid. The iPad keeps the grid.
+  const QS = new URLSearchParams(location.search);
+  const weekMode = () => QS.has("week") || (!QS.has("cal") && window.innerWidth < 700);
+  let wkOffset = 0;
+  function renderWeek() {
+    const box = $("wk"); box.textContent = "";
+    const now = new Date(), todayKey = iso(now), nowMin = now.getHours() * 60 + now.getMinutes();
+    const start = addDays(new Date(now.getFullYear(), now.getMonth(), now.getDate()), wkOffset * 7), end = addDays(start, 6);
+    const fmt = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const bar = el("div", "wk-bar");
+    bar.append(el("h2", null, `${wkOffset === 0 ? "Next 7 days" : "Week"} · ${fmt(start)}–${fmt(end)}`));
+    const btn = (label, fn) => { const b = el("button", null, label); b.type = "button"; b.addEventListener("click", (e) => { e.stopPropagation(); fn(); }); bar.append(b); };
+    btn("‹", () => { wkOffset--; renderWeek(); });
+    btn("Today", () => { wkOffset = 0; renderWeek(); });
+    btn("›", () => { wkOffset++; renderWeek(); });
+    btn(cfg.maint ? "Hide maintenance" : "Show maintenance", () => { cfg = { ...cfg, maint: !cfg.maint }; store.set(cfg); renderWeek(); });
+    if (!EMBED) btn("Setup", openSetup);
+    box.append(bar);
+    box.append(el("div", "wk-status", dataErr || (lastData ? `Updated ${lastData.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : "Loading…")));
+    const days = el("div", "wk-days");
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(start, i), key = iso(d), info = (data && data.days && data.days[key]) || { items: [] };
+      const col = el("section", "wk-day" + (key === todayKey ? " today" : ""));
+      const h = el("h3"); h.append(el("span", "d", String(d.getDate())), el("span", null, d.toLocaleDateString(undefined, { weekday: "long" }) + (key === todayKey ? " · today" : "")));
+      col.append(h);
+      const items = info.items || [];
+      items.filter((x) => x.kind === "deadline").forEach((x) => col.append(el("div", "wk-all due", `Due: ${x.title}`)));
+      items.filter((x) => x.kind === "shift" && !x.start).forEach((x) => col.append(el("div", "wk-all", x.title)));
+      const tasks = items.filter((x) => x.kind === "task" || x.kind === "reserved");
+      const used = {};
+      const blocks = (info.blocks && info.blocks.length ? info.blocks
+        : items.filter((x) => x.kind === "shift" && x.start).map((x) => ({ kind: "shift", title: x.title, start: x.start, end: x.end })))
+        .filter((b) => b.kind !== "sleep");
+      let shown = 0;
+      blocks.forEach((b) => {
+        const kind = BLOCK_KIND[b.kind] || "rhythm";
+        if (kind === "quiet" && !cfg.maint) return;
+        const bx = el("div", `wk-b k-${kind}${kind === "quiet" ? " quiet" : ""}`);
+        const st = toMin(b.start), en = toMin(b.end);
+        if (key === todayKey && st != null && en != null && en > st && en <= nowMin) bx.classList.add("over");
+        bx.append(el("span", "t", `${b.start || ""}${b.end ? "–" + b.end : ""}`), el("b", null, b.title));
+        const pool = b.kind === "bolus" ? "bolus" : b.kind === "study" ? "study" : null;
+        if (pool && !used[pool]) {
+          used[pool] = true;
+          const mine = tasks.filter((t) => (t.pool || "bolus") === pool);
+          if (mine.length) { const ul = el("ul"); mine.forEach((t) => ul.append(el("li", t.done ? "done" : "", `${t.title}${t.minutes ? ` · ${t.minutes}m` : ""}`))); bx.append(ul); }
+        }
+        col.append(bx); shown++;
+      });
+      if (!shown && !col.querySelector(".wk-all")) col.append(el("p", "wk-none", "Nothing planned"));
+      days.append(col);
+    }
+    box.append(days);
+  }
+
+  function render() {
+    applyTheme(); renderClock(); renderNow();
+    const wm = weekMode();
+    document.body.classList.toggle("weekmode", wm);
+    $("cal").hidden = wm; $("wk").hidden = !wm;
+    if (wm) renderWeek(); else { renderCal(); renderStrip(); }
+  }
 
   /* ---------- setup ---------- */
   const FIELDS = ["repo", "branch", "token", "place", "lat", "lon", "units", "clock", "theme", "from", "to"];
@@ -698,7 +795,7 @@ button.gear { background: none; border: 1px solid var(--line-strong); color: var
   if (!EMBED) document.body.classList.add("wall");
   render();
   if (EMBED) $("now").hidden = true;
-  window.addEventListener("resize", () => { VIS = visFor(); renderCal(); });
+  window.addEventListener("resize", () => { VIS = visFor(); render(); });
   // On the wall, drift back to today two minutes after a swipe.
   let back = null;
   if (!EMBED) $("scroller").addEventListener("scroll", () => {
